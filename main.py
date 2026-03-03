@@ -18,6 +18,7 @@ dp = Dispatcher()
 client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 user_last_prompt = {}
+user_waiting_for_edit = {}
 
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -25,17 +26,6 @@ def main_menu():
         [InlineKeyboardButton(text="🎥 إنشاء فيديو", callback_data="new_video")],
         [InlineKeyboardButton(text="⭐ رصيدي اليومي", callback_data="daily_balance")],
         [InlineKeyboardButton(text="💎 ترقية Premium", callback_data="premium")]
-    ])
-    return kb
-
-def aspect_ratio_keyboard():
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬜ 1:1 مربع", callback_data="ratio:1:1")],
-        [InlineKeyboardButton(text="📱 9:16 ريلز عمودي", callback_data="ratio:9:16")],
-        [InlineKeyboardButton(text="🖥️ 16:9 ريلز أفقي", callback_data="ratio:16:9")],
-        [InlineKeyboardButton(text="📲 4:5 إنستا", callback_data="ratio:4:5")],
-        [InlineKeyboardButton(text="📷 3:2 كلاسيكي", callback_data="ratio:3:2")],
-        [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
     ])
     return kb
 
@@ -65,46 +55,59 @@ async def start_new_image(callback: CallbackQuery):
     await callback.message.edit_text("🎨 اكتب وصف الصورة اللي تبغاها (بالعربي تماماً)")
 
 @dp.message(F.text)
-async def handle_prompt(message: types.Message):
-    if message.text.startswith('/'):
+async def handle_text(message: types.Message):
+    user_id = message.from_user.id
+    text = message.text.strip()
+
+    # وضع التعديل
+    if user_waiting_for_edit.get(user_id, False):
+        base_prompt = user_last_prompt.get(user_id, "")
+        edit_prompt = f"Edit this image: {text}"
+        msg = await message.answer("🖌️ جاري تعديل الصورة السابقة...")
+        try:
+            response = await client.images.generate(
+                model="grok-imagine-image",
+                prompt=edit_prompt,
+                n=1
+            )
+            image_url = response.data[0].url
+            await msg.edit_text("✅ تم التعديل!")
+            await message.answer_photo(image_url, caption=f"🖌️ تم التعديل!\n{text}", reply_markup=image_action_keyboard(text))
+            user_waiting_for_edit[user_id] = False
+        except Exception as e:
+            await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
+            user_waiting_for_edit[user_id] = False
         return
 
-    prompt = message.text.strip()
-    if len(prompt) < 5:
+    # توليد صورة عادية
+    if len(text) < 5:
         await message.answer("اكتب وصف أطول شوي يا وحش 😅")
         return
 
-    user_last_prompt[message.from_user.id] = prompt
-    await message.answer("✅ وصفك مسجل!\nاختر قياس الصورة 👇", reply_markup=aspect_ratio_keyboard())
-
-@dp.callback_query(F.data.startswith("ratio:"))
-async def generate_image(callback: CallbackQuery):
-    ratio_code = callback.data.split(":")[1]
-    user_id = callback.from_user.id
-    prompt = user_last_prompt.get(user_id)
-
-    if not prompt:
-        await callback.answer("❌ انتهت الجلسة، اضغط إنشاء صورة جديدة", show_alert=True)
-        return
-
-    msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio_code}")
-
+    user_last_prompt[user_id] = text
+    msg = await message.answer("⏳ جاري توليد الصورة... 🔥")
     try:
         response = await client.images.generate(
             model="grok-imagine-image",
-            prompt=prompt,
+            prompt=text,
             n=1
         )
         image_url = response.data[0].url
 
         await msg.edit_text("✅ تم التوليد!")
-        await callback.message.answer_photo(
+        await message.answer_photo(
             image_url,
-            caption=f"🎨 تم بنجاح!\nقياس: {ratio_code}\nPrompt: {prompt}",
-            reply_markup=image_action_keyboard(prompt)
+            caption=f"🎨 تم بنجاح!\nPrompt: {text}",
+            reply_markup=image_action_keyboard(text)
         )
     except Exception as e:
-        await msg.edit_text(f"❌ خطأ: {str(e)[:180]}")
+        await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
+
+@dp.callback_query(F.data == "edit_this")
+async def edit_this(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    user_waiting_for_edit[user_id] = True
+    await callback.message.answer("🖌️ اكتب وصف التعديل اللي تبغاه على هذه الصورة\nمثال: حولها لأنمي، غير الخلفية لشاطئ، اجعلها كرتون...")
 
 @dp.callback_query(F.data == "regenerate")
 async def regenerate(callback: CallbackQuery):
