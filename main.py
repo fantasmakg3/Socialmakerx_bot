@@ -30,8 +30,8 @@ def main_menu():
 
 def video_action_keyboard(prompt: str):
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 توليد فيديو جديد بنفس الوصف", callback_data="regenerate_video")],
-        [InlineKeyboardButton(text="🖼️ استخراج أفضل فريم كصورة", callback_data="extract_frame")],
+        [InlineKeyboardButton(text="🔄 توليد فيديو جديد", callback_data="regenerate_video")],
+        [InlineKeyboardButton(text="🖼️ استخراج فريم كصورة", callback_data="extract_frame")],
         [InlineKeyboardButton(text="❤️ حفظ", callback_data="save")],
         [InlineKeyboardButton(text="📤 مشاركة", callback_data="share")],
         [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
@@ -66,12 +66,10 @@ async def handle_video_prompt(message: types.Message):
 
     msg = await message.answer("🎥 جاري توليد فيديو 5 ثواني... 🔥")
     try:
-        # Grok Video Model - طول 5 ثواني
         response = await client.images.generate(
             model="grok-imagine-video",
             prompt=prompt,
-            n=1,
-            duration=5   # 5 ثواني ثابت
+            n=1
         )
         video_url = response.data[0].url
 
@@ -97,8 +95,7 @@ async def regenerate_video(callback: CallbackQuery):
         response = await client.images.generate(
             model="grok-imagine-video",
             prompt=prompt,
-            n=1,
-            duration=5
+            n=1
         )
         video_url = response.data[0].url
         await msg.edit_text("✅ تم توليد الفيديو!")
