@@ -19,12 +19,11 @@ client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 user_last_prompt = {}
 
-# Prompt engineering قوي جداً للقياسات
 RATIO_PROMPT = {
-    "1:1": "perfect square 1:1 aspect ratio, the entire image is perfectly square",
-    "9:16": "EXTREMELY TALL VERTICAL 9:16 ASPECT RATIO, the image MUST be very tall and narrow, full vertical reel format, portrait orientation, height much larger than width, tall narrow frame, vertical composition, do not generate square image, 9:16 ratio, Instagram Reel style",
+    "1:1": "perfect square 1:1 aspect ratio",
+    "9:16": "EXTREMELY TALL VERTICAL 9:16 ASPECT RATIO, the image MUST be very tall and narrow, height is twice the width, full vertical composition, Instagram Reel style, tall portrait image, vertical orientation, do not generate square or horizontal image, tall narrow frame, portrait format only",
     "16:9": "EXTREMELY WIDE HORIZONTAL 16:9 ASPECT RATIO, the image MUST be very wide and short, full horizontal landscape format, wide frame, do not generate vertical or square image",
-    "4:5": "4:5 portrait aspect ratio, slightly taller than square, vertical format",
+    "4:5": "4:5 portrait aspect ratio, slightly taller than square",
     "3:2": "classic 3:2 aspect ratio"
 }
 
