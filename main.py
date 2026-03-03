@@ -20,7 +20,6 @@ client = AsyncOpenAI(
     base_url="https://api.x.ai/v1",
 )
 
-# حفظ آخر وصف لكل يوزر
 user_last_prompt = {}
 
 def main_menu():
@@ -80,21 +79,20 @@ async def generate_image(callback: CallbackQuery):
         await callback.answer("❌ انتهت الجلسة، اضغط إنشاء صورة جديدة مرة ثانية", show_alert=True)
         return
 
-    msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio}")
+    msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio} (مربعة حالياً)")
 
     try:
         response = await client.images.generate(
             model="grok-imagine-image",
-            prompt=prompt,
-            n=1,
-            aspect_ratio=ratio
+            prompt=prompt,   # بدون aspect_ratio عشان ما يطلع خطأ
+            n=1
         )
         image_url = response.data[0].url
 
         await msg.edit_text("✅ تم التوليد!")
         await callback.message.answer_photo(
             image_url,
-            caption=f"🎨 تم بنجاح!\nقياس: {ratio}\nPrompt: {prompt}",
+            caption=f"🎨 تم بنجاح!\nقياس: {ratio} (مربعة 1:1 حالياً)\nPrompt: {prompt}",
             reply_markup=aspect_ratio_keyboard()
         )
     except Exception as e:
