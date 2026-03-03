@@ -15,7 +15,7 @@ FAL_KEY = os.getenv("FAL_KEY")
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-client = fal_client.AsyncFalClient(key=FAL_KEY)
+client = fal_client.AsyncClient(key=FAL_KEY)
 
 user_last_prompt = {}
 
@@ -64,14 +64,13 @@ async def new_image(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "new_video")
 async def new_video(callback: CallbackQuery):
-    await callback.message.edit_text(
-        "🎥 اكتب وصف الفيديو (5 ثواني)\n"
-        "مثال: قط يركض على الشاطئ ويطارد كرة\n"
-        "أو ارفع صورة + اكتب في الكابشن وصف الحركة"
-    )
+    await callback.message.edit_text("🎥 اكتب وصف الفيديو (5 ثواني)\nمثال: قط يركض على الشاطئ ويطارد كرة")
 
 @dp.message(F.text)
 async def handle_prompt(message: types.Message):
+    if message.text.startswith('/'):
+        return
+
     prompt = message.text.strip()
     if len(prompt) < 5:
         await message.answer("اكتب وصف أطول شوي يا وحش 😅")
@@ -79,15 +78,16 @@ async def handle_prompt(message: types.Message):
 
     user_last_prompt[message.from_user.id] = prompt
 
-    msg = await message.answer("⏳ جاري التوليد بـ Flux... 🔥")
+    msg = await message.answer("⏳ جاري التوليد بـ Flux (9:16 ريلز)... 🔥")
     try:
         result = await client.subscribe(
-            "fal-ai/flux-pro/v1.1",
+            "fal-ai/flux-pro",
             arguments={
                 "prompt": prompt,
-                "image_size": {"width": 1024, "height": 1792},  # 9:16 ريلز عمودي
+                "image_size": {"width": 832, "height": 1472},  # 9:16 عمودي مثالي
                 "num_inference_steps": 28,
-                "guidance_scale": 3.5
+                "guidance_scale": 3.5,
+                "enable_safety_checker": False
             }
         )
         image_url = result["images"][0]["url"]
@@ -103,14 +103,26 @@ async def handle_prompt(message: types.Message):
 
 @dp.callback_query(F.data == "regenerate")
 async def regenerate(callback: CallbackQuery):
-    # نفس الكود الخاص بالتوليد أعلاه (مختصر)
     user_id = callback.from_user.id
     prompt = user_last_prompt.get(user_id)
     if not prompt:
         await callback.answer("❌ انتهت الجلسة", show_alert=True)
         return
-    # ... (أعد استخدام نفس كود التوليد أعلاه)
-    await callback.answer("🔄 جاري إعادة التوليد...")
+    # نفس كود التوليد أعلاه (مكرر للبساطة)
+    msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
+    try:
+        result = await client.subscribe("fal-ai/flux-pro", arguments={
+            "prompt": prompt,
+            "image_size": {"width": 832, "height": 1472},
+            "num_inference_steps": 28,
+            "guidance_scale": 3.5,
+            "enable_safety_checker": False
+        })
+        image_url = result["images"][0]["url"]
+        await msg.edit_text("✅ تم التوليد!")
+        await callback.message.answer_photo(image_url, caption=f"🎨 تم بنجاح (إعادة)!\nPrompt: {prompt}", reply_markup=image_action_keyboard(prompt))
+    except Exception as e:
+        await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
 
 @dp.callback_query()
 async def other_buttons(callback: CallbackQuery):
