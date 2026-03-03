@@ -18,6 +18,7 @@ dp = Dispatcher()
 client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 user_last_prompt = {}
+user_waiting_for_edit = {}
 
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -59,11 +60,29 @@ async def handle_prompt(message: types.Message):
         return
 
     prompt = message.text.strip()
+    user_id = message.from_user.id
+
+    # إذا كان في وضع التعديل
+    if user_waiting_for_edit.get(user_id, False):
+        full_prompt = f"Edit this image: {prompt}"
+        msg = await message.answer("🖌️ جاري التعديل على الصورة السابقة...")
+        try:
+            response = await client.images.generate(model="grok-imagine-image", prompt=full_prompt, n=1)
+            image_url = response.data[0].url
+            await msg.edit_text("✅ تم التعديل!")
+            await message.answer_photo(image_url, caption=f"🖌️ تم التعديل!\n{prompt}", reply_markup=image_action_keyboard(prompt))
+            user_waiting_for_edit[user_id] = False
+        except Exception as e:
+            await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
+            user_waiting_for_edit[user_id] = False
+        return
+
+    # توليد صورة عادية
     if len(prompt) < 5:
         await message.answer("اكتب وصف أطول شوي يا وحش 😅")
         return
 
-    user_last_prompt[message.from_user.id] = prompt
+    user_last_prompt[user_id] = prompt
 
     msg = await message.answer("⏳ جاري توليد الصورة... 🔥")
     try:
@@ -83,12 +102,18 @@ async def handle_prompt(message: types.Message):
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
 
+@dp.callback_query(F.data == "edit_this")
+async def edit_this(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    user_waiting_for_edit[user_id] = True
+    await callback.message.answer("🖌️ اكتب وصف التعديل اللي تبغاه على هذه الصورة (مثال: حولها لأنمي، غير الخلفية لشاطئ...)")
+
 @dp.callback_query(F.data == "regenerate")
 async def regenerate(callback: CallbackQuery):
     user_id = callback.from_user.id
     prompt = user_last_prompt.get(user_id)
     if not prompt:
-        await callback.answer("❌ انتهت الجلسة", show_alert=True)
+        await callback.answer("❌ انتهت الجلسة، ابدأ من جديد", show_alert=True)
         return
 
     msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
@@ -104,45 +129,12 @@ async def regenerate(callback: CallbackQuery):
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
 
-@dp.callback_query(F.data == "edit_this")
-async def edit_this(callback: CallbackQuery):
-    await callback.answer("📸 ارفع الصورة الآن + اكتب في الكابشن:\nedit: وصف التعديل", show_alert=True)
-
-@dp.callback_query(F.data == "to_video")
-async def to_video(callback: CallbackQuery):
-    await callback.answer("🎥 تحويل إلى فيديو قريباً إن شاء الله 🔥", show_alert=True)
-
-@dp.callback_query(F.data == "upscale")
-async def upscale(callback: CallbackQuery):
-    await callback.answer("⬆️ تحسين الجودة قريباً إن شاء الله 🔥", show_alert=True)
-
-@dp.callback_query(F.data == "save")
-async def save(callback: CallbackQuery):
-    await callback.answer("❤️ تم الحفظ في المفضلة!", show_alert=True)
-
-@dp.callback_query(F.data == "share")
-async def share(callback: CallbackQuery):
-    await callback.answer("📤 تم مشاركة الصورة!", show_alert=True)
-
-@dp.callback_query(F.data == "main_menu")
-async def main_menu_callback(callback: CallbackQuery):
-    await callback.message.edit_text("🏠 القائمة الرئيسية", reply_markup=main_menu())
-
-@dp.message(F.photo)
-async def handle_edit_photo(message: types.Message):
-    if message.caption and ("edit" in message.caption.lower() or "تعديل" in message.caption):
-        edit_text = message.caption.lower().replace("edit:", "").replace("تعديل:", "").strip() or "حسن الصورة"
-        prompt = f"Edit this image: {edit_text}"
-        msg = await message.answer("🖌️ جاري التعديل...")
-        try:
-            response = await client.images.generate(model="grok-imagine-image", prompt=prompt, n=1)
-            image_url = response.data[0].url
-            await msg.edit_text("✅ تم التعديل!")
-            await message.answer_photo(image_url, caption=f"🖌️ تم التعديل!\n{edit_text}", reply_markup=image_action_keyboard(edit_text))
-        except Exception as e:
-            await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
+@dp.callback_query()
+async def other_buttons(callback: CallbackQuery):
+    if callback.data == "main_menu":
+        await callback.message.edit_text("🏠 القائمة الرئيسية", reply_markup=main_menu())
     else:
-        await message.answer("📸 ارفع الصورة + اكتب في الكابشن:\nedit: وصف التعديل")
+        await callback.answer("⏳ قريباً إن شاء الله 🔥", show_alert=True)
 
 async def main():
     await dp.start_polling(bot)
