@@ -6,6 +6,8 @@ from aiogram.filters import Command
 from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from openai import AsyncOpenAI
+from PIL import Image
+import io
 
 logging.basicConfig(level=logging.INFO)
 
@@ -18,7 +20,6 @@ dp = Dispatcher()
 client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 user_last_prompt = {}
-user_waiting_for_edit = {}
 
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -60,36 +61,19 @@ async def handle_prompt(message: types.Message):
         return
 
     prompt = message.text.strip()
-    user_id = message.from_user.id
-
-    # إذا كان في وضع التعديل
-    if user_waiting_for_edit.get(user_id, False):
-        full_prompt = f"Edit this image: {prompt}"
-        msg = await message.answer("🖌️ جاري التعديل على الصورة السابقة...")
-        try:
-            response = await client.images.generate(model="grok-imagine-image", prompt=full_prompt, n=1)
-            image_url = response.data[0].url
-            await msg.edit_text("✅ تم التعديل!")
-            await message.answer_photo(image_url, caption=f"🖌️ تم التعديل!\n{prompt}", reply_markup=image_action_keyboard(prompt))
-            user_waiting_for_edit[user_id] = False
-        except Exception as e:
-            await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
-            user_waiting_for_edit[user_id] = False
-        return
-
-    # توليد صورة عادية
     if len(prompt) < 5:
         await message.answer("اكتب وصف أطول شوي يا وحش 😅")
         return
 
-    user_last_prompt[user_id] = prompt
+    user_last_prompt[message.from_user.id] = prompt
 
     msg = await message.answer("⏳ جاري توليد الصورة... 🔥")
     try:
         response = await client.images.generate(
             model="grok-imagine-image",
             prompt=prompt,
-            n=1
+            n=1,
+            aspect_ratio="9:16"   # ← هذا الباراميتر الرسمي للريلز العمودي
         )
         image_url = response.data[0].url
 
@@ -100,34 +84,35 @@ async def handle_prompt(message: types.Message):
             reply_markup=image_action_keyboard(prompt)
         )
     except Exception as e:
-        await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
-
-@dp.callback_query(F.data == "edit_this")
-async def edit_this(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    user_waiting_for_edit[user_id] = True
-    await callback.message.answer("🖌️ اكتب وصف التعديل اللي تبغاه على هذه الصورة (مثال: حولها لأنمي، غير الخلفية لشاطئ...)")
+        await msg.edit_text("⏳ جاري توليد بطريقة بديلة...")
+        # fallback قوي جداً
+        final_prompt = f"{prompt}, EXTREMELY TALL VERTICAL 9:16 portrait reel format, tall narrow image, full vertical composition, portrait orientation, height much larger than width"
+        response = await client.images.generate(model="grok-imagine-image", prompt=final_prompt, n=1)
+        image_url = response.data[0].url
+        await msg.edit_text("✅ تم التوليد!")
+        await message.answer_photo(image_url, caption=f"🎨 تم بنجاح!\nPrompt: {prompt}", reply_markup=image_action_keyboard(prompt))
 
 @dp.callback_query(F.data == "regenerate")
 async def regenerate(callback: CallbackQuery):
     user_id = callback.from_user.id
     prompt = user_last_prompt.get(user_id)
     if not prompt:
-        await callback.answer("❌ انتهت الجلسة، ابدأ من جديد", show_alert=True)
+        await callback.answer("❌ انتهت الجلسة", show_alert=True)
         return
 
     msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
     try:
-        response = await client.images.generate(model="grok-imagine-image", prompt=prompt, n=1)
+        response = await client.images.generate(
+            model="grok-imagine-image",
+            prompt=prompt,
+            n=1,
+            aspect_ratio="9:16"
+        )
         image_url = response.data[0].url
         await msg.edit_text("✅ تم التوليد!")
-        await callback.message.answer_photo(
-            image_url,
-            caption=f"🎨 تم بنجاح (إعادة توليد)!\nPrompt: {prompt}",
-            reply_markup=image_action_keyboard(prompt)
-        )
+        await callback.message.answer_photo(image_url, caption=f"🎨 تم بنجاح (إعادة توليد)!\nPrompt: {prompt}", reply_markup=image_action_keyboard(prompt))
     except Exception as e:
-        await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
+        await msg.edit_text("❌ خطأ: {str(e)[:150]}")
 
 @dp.callback_query()
 async def other_buttons(callback: CallbackQuery):
