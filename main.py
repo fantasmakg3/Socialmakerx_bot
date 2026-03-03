@@ -44,8 +44,8 @@ def image_action_keyboard(prompt: str):
 async def start(message: types.Message):
     await message.answer(
         "👋 مرحبا يا وحش في @Socialmakerx_bot!\n"
-        "بوت fal.ai (Flux + Kling) مجاني 100% 🔥\n\n"
-        "اختر اللي تبغاه 👇",
+        "بوت Flux Pro + Kling 🔥\n\n"
+        "لأفضل نتيجة اكتب الوصف بالإنجليزي مفصل أو عربي طويل جداً",
         reply_markup=main_menu()
     )
 
@@ -60,11 +60,7 @@ async def image_menu(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "new_image")
 async def new_image(callback: CallbackQuery):
-    await callback.message.edit_text("🎨 اكتب وصف الصورة (بالعربي تماماً)")
-
-@dp.callback_query(F.data == "new_video")
-async def new_video(callback: CallbackQuery):
-    await callback.message.edit_text("🎥 اكتب وصف الفيديو (5 ثواني)\nمثال: قط يركض على الشاطئ ويطارد كرة")
+    await callback.message.edit_text("🎨 اكتب وصف الصورة (بالإنجليزي أفضل للنتيجة المثالية)")
 
 @dp.message(F.text)
 async def handle_prompt(message: types.Message):
@@ -78,21 +74,24 @@ async def handle_prompt(message: types.Message):
 
     user_last_prompt[message.from_user.id] = prompt
 
-    msg = await message.answer("⏳ جاري التوليد بـ Flux (9:16 ريلز)... 🔥")
+    # تحسين البرومبت لـ Flux (يجعله يلتزم أكثر)
+    enhanced_prompt = f"masterpiece, best quality, ultra detailed, 8k, sharp focus, cinematic lighting, {prompt}"
+
+    msg = await message.answer("⏳ جاري التوليد بـ Flux Pro (9:16 ريلز)... 🔥")
     try:
         result = await client.subscribe(
             "fal-ai/flux-pro",
             arguments={
-                "prompt": prompt,
-                "image_size": {"width": 832, "height": 1472},  # 9:16 عمودي مثالي
-                "num_inference_steps": 28,
-                "guidance_scale": 3.5,
+                "prompt": enhanced_prompt,
+                "image_size": {"width": 832, "height": 1472},   # 9:16 عمودي مثالي
+                "num_inference_steps": 35,
+                "guidance_scale": 7.5,
                 "enable_safety_checker": False
             }
         )
         image_url = result["images"][0]["url"]
 
-        await msg.edit_text("✅ تم التوليد بـ Flux!")
+        await msg.edit_text("✅ تم التوليد بـ Flux Pro!")
         await message.answer_photo(
             image_url,
             caption=f"🎨 تم بنجاح!\nPrompt: {prompt}",
@@ -108,14 +107,15 @@ async def regenerate(callback: CallbackQuery):
     if not prompt:
         await callback.answer("❌ انتهت الجلسة", show_alert=True)
         return
-    # نفس كود التوليد أعلاه (مكرر للبساطة)
+
+    enhanced_prompt = f"masterpiece, best quality, ultra detailed, 8k, sharp focus, cinematic lighting, {prompt}"
     msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
     try:
         result = await client.subscribe("fal-ai/flux-pro", arguments={
-            "prompt": prompt,
+            "prompt": enhanced_prompt,
             "image_size": {"width": 832, "height": 1472},
-            "num_inference_steps": 28,
-            "guidance_scale": 3.5,
+            "num_inference_steps": 35,
+            "guidance_scale": 7.5,
             "enable_safety_checker": False
         })
         image_url = result["images"][0]["url"]
