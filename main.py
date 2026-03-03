@@ -21,7 +21,15 @@ user_last_prompt = {}
 
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎨 إنشاء صورة", callback_data="new_image")],
+        [InlineKeyboardButton(text="🖼️ إنشاء / تعديل صور", callback_data="image_menu")],
+        [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
+    ])
+    return kb
+
+def image_menu_keyboard():
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎨 إنشاء صورة جديدة", callback_data="new_image")],
+        [InlineKeyboardButton(text="🖌️ تعديل الصورة", callback_data="edit_image")],
         [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
     ])
     return kb
@@ -30,14 +38,26 @@ def main_menu():
 async def start(message: types.Message):
     await message.answer(
         "👋 مرحبا يا وحش في @Socialmakerx_bot!\n"
-        "بوت Grok Imagine الرسمي 🔥\n\n"
-        "اضغط على الزر و اكتب الوصف",
+        "Grok Imagine الرسمي 🔥\n\n"
+        "اختر اللي تبغاه:",
         reply_markup=main_menu()
     )
 
+@dp.callback_query(F.data == "image_menu")
+async def show_image_menu(callback: CallbackQuery):
+    await callback.message.edit_text("🖼️ اختر الخدمة:", reply_markup=image_menu_keyboard())
+
 @dp.callback_query(F.data == "new_image")
 async def new_image(callback: CallbackQuery):
-    await callback.message.edit_text("🎨 اكتب وصف الصورة بالعربي (طويل أفضل)")
+    await callback.message.edit_text("🎨 اكتب وصف الصورة بالعربي")
+
+@dp.callback_query(F.data == "edit_image")
+async def edit_image(callback: CallbackQuery):
+    await callback.message.answer(
+        "📸 ارفع الصورة اللي تبغى تعدلها\n"
+        "واكتب في الكابشن وصف التعديل\n"
+        "مثال: غير لون القط إلى الزهري"
+    )
 
 @dp.message(F.text)
 async def handle_text(message: types.Message):
@@ -51,7 +71,7 @@ async def handle_text(message: types.Message):
 
     user_last_prompt[message.from_user.id] = prompt
 
-    msg = await message.answer("⏳ جاري التوليد بـ Grok Imagine... 🔥")
+    msg = await message.answer("⏳ جاري التوليد بـ Grok Imagine...")
     try:
         response = await client.images.generate(
             model="grok-imagine-image",
@@ -70,26 +90,26 @@ async def handle_text(message: types.Message):
         await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
 
 @dp.message(F.photo)
-async def handle_edit(message: types.Message):
+async def handle_photo_edit(message: types.Message):
     if not message.caption:
-        await message.answer("ارفع الصورة + اكتب في الكابشن وصف التعديل\nمثال: غير لون القط إلى الزهري")
+        await message.answer("❌ لازم تكتب وصف التعديل في الكابشن")
         return
 
     edit_desc = message.caption.strip()
-    msg = await message.answer("🖌️ جاري تعديل الصورة بـ Grok Imagine...")
+    msg = await message.answer("🖌️ جاري تعديل الصورة بـ grok-imagine-image-pro...")
 
     try:
         response = await client.images.generate(
-            model="grok-imagine-image",
+            model="grok-imagine-image-pro",   # ← النموذج الـ Pro للتعديل
             prompt=f"Edit this image: {edit_desc}",
             n=1
         )
         image_url = response.data[0].url
 
-        await msg.edit_text("✅ تم التعديل!")
+        await msg.edit_text("✅ تم التعديل بـ Pro!")
         await message.answer_photo(
             image_url,
-            caption=f"🖌️ تم التعديل!\n{edit_desc}",
+            caption=f"🖌️ تم التعديل!\nالتعديل: {edit_desc}",
             reply_markup=main_menu()
         )
     except Exception as e:
