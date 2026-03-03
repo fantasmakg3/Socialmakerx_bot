@@ -18,8 +18,16 @@ dp = Dispatcher()
 client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 user_last_prompt = {}
+user_last_ratio = {}
 
-# ==================== KEYBOARDS ====================
+RATIO_TEXT = {
+    "1:1": "in square 1:1 aspect ratio",
+    "9:16": "in vertical 9:16 reel format",
+    "16:9": "in horizontal 16:9 reel format",
+    "4:5": "in 4:5 portrait format",
+    "3:2": "in classic 3:2 aspect ratio"
+}
+
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎨 إنشاء صورة جديدة", callback_data="new_image")],
@@ -53,7 +61,6 @@ def image_action_keyboard(prompt: str):
     ])
     return kb
 
-# ==================== HANDLERS ====================
 @dp.message(Command("start"))
 async def start(message: types.Message):
     await message.answer(
@@ -82,20 +89,25 @@ async def handle_prompt(message: types.Message):
 
 @dp.callback_query(F.data.startswith("ratio:"))
 async def generate_image(callback: CallbackQuery):
-    ratio = callback.data.split(":")[1]
+    ratio_code = callback.data.split(":")[1]
     user_id = callback.from_user.id
     prompt = user_last_prompt.get(user_id)
 
     if not prompt:
-        await callback.answer("❌ انتهت الجلسة، اضغط إنشاء صورة جديدة مرة ثانية", show_alert=True)
+        await callback.answer("❌ انتهت الجلسة، ابدأ من جديد", show_alert=True)
         return
 
-    msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio}")
+    user_last_ratio[user_id] = ratio_code
+    ratio_text = RATIO_TEXT.get(ratio_code, "")
+
+    final_prompt = f"{prompt}, {ratio_text}"
+
+    msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio_code}")
 
     try:
         response = await client.images.generate(
             model="grok-imagine-image",
-            prompt=prompt,
+            prompt=final_prompt,
             n=1
         )
         image_url = response.data[0].url
@@ -103,8 +115,8 @@ async def generate_image(callback: CallbackQuery):
         await msg.edit_text("✅ تم التوليد!")
         await callback.message.answer_photo(
             image_url,
-            caption=f"🎨 تم بنجاح!\nقياس: {ratio}\nPrompt: {prompt}",
-            reply_markup=image_action_keyboard(prompt)   # ← هنا الأزرار الصحيحة
+            caption=f"🎨 تم بنجاح!\nقياس: {ratio_code}\nPrompt: {prompt}",
+            reply_markup=image_action_keyboard(prompt)
         )
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:180]}")
@@ -114,17 +126,21 @@ async def regenerate(callback: CallbackQuery):
     user_id = callback.from_user.id
     prompt = user_last_prompt.get(user_id)
     if not prompt:
-        await callback.answer("❌ انتهت الجلسة، ابدأ من جديد", show_alert=True)
+        await callback.answer("❌ انتهت الجلسة", show_alert=True)
         return
+
+    ratio_code = user_last_ratio.get(user_id, "1:1")
+    ratio_text = RATIO_TEXT.get(ratio_code, "")
+    final_prompt = f"{prompt}, {ratio_text}"
 
     msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
     try:
-        response = await client.images.generate(model="grok-imagine-image", prompt=prompt, n=1)
+        response = await client.images.generate(model="grok-imagine-image", prompt=final_prompt, n=1)
         image_url = response.data[0].url
         await msg.edit_text("✅ تم التوليد!")
         await callback.message.answer_photo(
             image_url,
-            caption=f"🎨 تم بنجاح (إعادة توليد)!\nPrompt: {prompt}",
+            caption=f"🎨 تم بنجاح (إعادة توليد)!\nقياس: {ratio_code}\nPrompt: {prompt}",
             reply_markup=image_action_keyboard(prompt)
         )
     except Exception as e:
@@ -134,10 +150,8 @@ async def regenerate(callback: CallbackQuery):
 async def other_buttons(callback: CallbackQuery):
     if callback.data == "main_menu":
         await callback.message.edit_text("🏠 القائمة الرئيسية", reply_markup=main_menu())
-    elif callback.data in ["edit_this", "to_video", "upscale", "save", "share"]:
-        await callback.answer("⏳ قريباً إن شاء الله 🔥", show_alert=True)
     else:
-        await callback.answer("تم!", show_alert=False)
+        await callback.answer("⏳ قريباً إن شاء الله 🔥", show_alert=True)
 
 async def main():
     await dp.start_polling(bot)
