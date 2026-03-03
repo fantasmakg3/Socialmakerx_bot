@@ -20,6 +20,7 @@ client = AsyncOpenAI(
     base_url="https://api.x.ai/v1",
 )
 
+# حفظ آخر وصف لكل يوزر
 user_last_prompt = {}
 
 def main_menu():
@@ -32,13 +33,13 @@ def main_menu():
     ])
     return kb
 
-def aspect_ratio_keyboard(prompt: str):
+def aspect_ratio_keyboard():
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬜ 1:1 مربع", callback_data=f"ratio:1:1:{prompt[:40]}")],
-        [InlineKeyboardButton(text="📱 9:16 ريلز عمودي", callback_data=f"ratio:9:16:{prompt[:40]}")],
-        [InlineKeyboardButton(text="🖥️ 16:9 ريلز أفقي", callback_data=f"ratio:16:9:{prompt[:40]}")],
-        [InlineKeyboardButton(text="📲 4:5 إنستا", callback_data=f"ratio:4:5:{prompt[:40]}")],
-        [InlineKeyboardButton(text="📷 3:2 كلاسيكي", callback_data=f"ratio:3:2:{prompt[:40]}")],
+        [InlineKeyboardButton(text="⬜ 1:1 مربع", callback_data="ratio:1:1")],
+        [InlineKeyboardButton(text="📱 9:16 ريلز عمودي", callback_data="ratio:9:16")],
+        [InlineKeyboardButton(text="🖥️ 16:9 ريلز أفقي", callback_data="ratio:16:9")],
+        [InlineKeyboardButton(text="📲 4:5 إنستا", callback_data="ratio:4:5")],
+        [InlineKeyboardButton(text="📷 3:2 كلاسيكي", callback_data="ratio:3:2")],
         [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
     ])
     return kb
@@ -59,22 +60,19 @@ async def start_new_image(callback: CallbackQuery):
         "مثال: قط جميل يمشي على سطح القمر يرتدي نظارات"
     )
 
-@dp.message()
-async def handle_text(message: types.Message):
-    if message.text.startswith('/'):
-        return  # تجاهل الأوامر مثل /start
-
+@dp.message(F.text & ~F.text.startswith('/'))
+async def handle_prompt(message: types.Message):
     prompt = message.text.strip()
     if len(prompt) < 5:
         await message.answer("اكتب وصف أطول شوي يا وحش 😅")
         return
 
     user_last_prompt[message.from_user.id] = prompt
-    await message.answer("✅ وصفك مسجل!\nاختر قياس الصورة 👇", reply_markup=aspect_ratio_keyboard(prompt))
+    await message.answer("✅ وصفك مسجل!\nاختر قياس الصورة 👇", reply_markup=aspect_ratio_keyboard())
 
 @dp.callback_query(F.data.startswith("ratio:"))
-async def generate_image_with_ratio(callback: CallbackQuery):
-    _, ratio, short_prompt = callback.data.split(":", 2)
+async def generate_image(callback: CallbackQuery):
+    ratio = callback.data.split(":")[1]
     user_id = callback.from_user.id
     prompt = user_last_prompt.get(user_id)
 
@@ -92,12 +90,12 @@ async def generate_image_with_ratio(callback: CallbackQuery):
             aspect_ratio=ratio
         )
         image_url = response.data[0].url
-        
+
         await msg.edit_text("✅ تم التوليد!")
         await callback.message.answer_photo(
             image_url,
             caption=f"🎨 تم بنجاح!\nقياس: {ratio}\nPrompt: {prompt}",
-            reply_markup=aspect_ratio_keyboard(prompt)
+            reply_markup=aspect_ratio_keyboard()
         )
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:180]}")
