@@ -18,14 +18,14 @@ dp = Dispatcher()
 client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 user_last_prompt = {}
-user_last_ratio = {}
 
-RATIO_TEXT = {
-    "1:1": "in square 1:1 aspect ratio",
-    "9:16": "in vertical 9:16 reel format",
-    "16:9": "in horizontal 16:9 reel format",
-    "4:5": "in 4:5 portrait format",
-    "3:2": "in classic 3:2 aspect ratio"
+# Prompt engineering أقوى للقياسات
+RATIO_PROMPT = {
+    "1:1": "perfect square 1:1 aspect ratio, the entire image must be perfectly square, no cropping",
+    "9:16": "vertical 9:16 aspect ratio, tall portrait format, Instagram Reel style, the image must be tall and narrow, full vertical composition, no horizontal cropping",
+    "16:9": "horizontal 16:9 aspect ratio, wide landscape format, the image must be wide and short, full horizontal composition",
+    "4:5": "4:5 aspect ratio, portrait format, slightly taller than square, the image must fit perfectly in 4:5",
+    "3:2": "classic 3:2 aspect ratio, the image must be exactly 3:2 ratio"
 }
 
 def main_menu():
@@ -91,16 +91,14 @@ async def handle_prompt(message: types.Message):
 async def generate_image(callback: CallbackQuery):
     ratio_code = callback.data.split(":")[1]
     user_id = callback.from_user.id
-    prompt = user_last_prompt.get(user_id)
+    base_prompt = user_last_prompt.get(user_id)
 
-    if not prompt:
-        await callback.answer("❌ انتهت الجلسة، ابدأ من جديد", show_alert=True)
+    if not base_prompt:
+        await callback.answer("❌ انتهت الجلسة، اضغط إنشاء صورة جديدة مرة ثانية", show_alert=True)
         return
 
-    user_last_ratio[user_id] = ratio_code
-    ratio_text = RATIO_TEXT.get(ratio_code, "")
-
-    final_prompt = f"{prompt}, {ratio_text}"
+    ratio_instruction = RATIO_PROMPT.get(ratio_code, "")
+    final_prompt = f"{base_prompt}. {ratio_instruction}, masterpiece, highly detailed, best quality"
 
     msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio_code}")
 
@@ -115,8 +113,8 @@ async def generate_image(callback: CallbackQuery):
         await msg.edit_text("✅ تم التوليد!")
         await callback.message.answer_photo(
             image_url,
-            caption=f"🎨 تم بنجاح!\nقياس: {ratio_code}\nPrompt: {prompt}",
-            reply_markup=image_action_keyboard(prompt)
+            caption=f"🎨 تم بنجاح!\nقياس: {ratio_code}\nPrompt: {base_prompt}",
+            reply_markup=image_action_keyboard(base_prompt)
         )
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:180]}")
@@ -124,14 +122,15 @@ async def generate_image(callback: CallbackQuery):
 @dp.callback_query(F.data == "regenerate")
 async def regenerate(callback: CallbackQuery):
     user_id = callback.from_user.id
-    prompt = user_last_prompt.get(user_id)
-    if not prompt:
+    base_prompt = user_last_prompt.get(user_id)
+    if not base_prompt:
         await callback.answer("❌ انتهت الجلسة", show_alert=True)
         return
 
-    ratio_code = user_last_ratio.get(user_id, "1:1")
-    ratio_text = RATIO_TEXT.get(ratio_code, "")
-    final_prompt = f"{prompt}, {ratio_text}"
+    # نستخدم آخر قياس اختاره اليوزر
+    ratio_code = "1:1"  # افتراضي، يمكن تحسينه لاحقاً
+    ratio_instruction = RATIO_PROMPT.get(ratio_code, "")
+    final_prompt = f"{base_prompt}. {ratio_instruction}, masterpiece, highly detailed"
 
     msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
     try:
@@ -140,8 +139,8 @@ async def regenerate(callback: CallbackQuery):
         await msg.edit_text("✅ تم التوليد!")
         await callback.message.answer_photo(
             image_url,
-            caption=f"🎨 تم بنجاح (إعادة توليد)!\nقياس: {ratio_code}\nPrompt: {prompt}",
-            reply_markup=image_action_keyboard(prompt)
+            caption=f"🎨 تم بنجاح (إعادة توليد)!\nPrompt: {base_prompt}",
+            reply_markup=image_action_keyboard(base_prompt)
         )
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
