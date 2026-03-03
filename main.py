@@ -15,13 +15,11 @@ XAI_API_KEY = os.getenv("XAI_API_KEY")
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-client = AsyncOpenAI(
-    api_key=XAI_API_KEY,
-    base_url="https://api.x.ai/v1",
-)
+client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 user_last_prompt = {}
 
+# ==================== KEYBOARDS ====================
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎨 إنشاء صورة جديدة", callback_data="new_image")],
@@ -43,6 +41,19 @@ def aspect_ratio_keyboard():
     ])
     return kb
 
+def image_action_keyboard(prompt: str):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 توليد جديد بنفس الوصف", callback_data="regenerate")],
+        [InlineKeyboardButton(text="🖌️ تعديل هذه الصورة", callback_data="edit_this")],
+        [InlineKeyboardButton(text="🎥 حولها إلى فيديو", callback_data="to_video")],
+        [InlineKeyboardButton(text="⬆️ تحسين الجودة", callback_data="upscale")],
+        [InlineKeyboardButton(text="❤️ حفظ", callback_data="save"), 
+         InlineKeyboardButton(text="📤 مشاركة", callback_data="share")],
+        [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
+    ])
+    return kb
+
+# ==================== HANDLERS ====================
 @dp.message(Command("start"))
 async def start(message: types.Message):
     await message.answer(
@@ -79,12 +90,12 @@ async def generate_image(callback: CallbackQuery):
         await callback.answer("❌ انتهت الجلسة، اضغط إنشاء صورة جديدة مرة ثانية", show_alert=True)
         return
 
-    msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio} (مربعة حالياً)")
+    msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio}")
 
     try:
         response = await client.images.generate(
             model="grok-imagine-image",
-            prompt=prompt,   # بدون aspect_ratio عشان ما يطلع خطأ
+            prompt=prompt,
             n=1
         )
         image_url = response.data[0].url
@@ -92,18 +103,41 @@ async def generate_image(callback: CallbackQuery):
         await msg.edit_text("✅ تم التوليد!")
         await callback.message.answer_photo(
             image_url,
-            caption=f"🎨 تم بنجاح!\nقياس: {ratio} (مربعة 1:1 حالياً)\nPrompt: {prompt}",
-            reply_markup=aspect_ratio_keyboard()
+            caption=f"🎨 تم بنجاح!\nقياس: {ratio}\nPrompt: {prompt}",
+            reply_markup=image_action_keyboard(prompt)   # ← هنا الأزرار الصحيحة
         )
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:180]}")
+
+@dp.callback_query(F.data == "regenerate")
+async def regenerate(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    prompt = user_last_prompt.get(user_id)
+    if not prompt:
+        await callback.answer("❌ انتهت الجلسة، ابدأ من جديد", show_alert=True)
+        return
+
+    msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
+    try:
+        response = await client.images.generate(model="grok-imagine-image", prompt=prompt, n=1)
+        image_url = response.data[0].url
+        await msg.edit_text("✅ تم التوليد!")
+        await callback.message.answer_photo(
+            image_url,
+            caption=f"🎨 تم بنجاح (إعادة توليد)!\nPrompt: {prompt}",
+            reply_markup=image_action_keyboard(prompt)
+        )
+    except Exception as e:
+        await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
 
 @dp.callback_query()
 async def other_buttons(callback: CallbackQuery):
     if callback.data == "main_menu":
         await callback.message.edit_text("🏠 القائمة الرئيسية", reply_markup=main_menu())
-    else:
+    elif callback.data in ["edit_this", "to_video", "upscale", "save", "share"]:
         await callback.answer("⏳ قريباً إن شاء الله 🔥", show_alert=True)
+    else:
+        await callback.answer("تم!", show_alert=False)
 
 async def main():
     await dp.start_polling(bot)
