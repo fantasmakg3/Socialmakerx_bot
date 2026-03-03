@@ -61,7 +61,7 @@ async def handle_new_image(message: types.Message):
 
     user_last_prompt[message.from_user.id] = prompt
 
-    msg = await message.answer("⏳ جاري التوليد بـ Grok Imagine...")
+    msg = await message.answer("⏳ جاري التوليد...")
     try:
         response = await client.images.generate(
             model="grok-imagine-image",
@@ -71,15 +71,11 @@ async def handle_new_image(message: types.Message):
         image_url = response.data[0].url
 
         await msg.edit_text("✅ تم التوليد!")
-        await message.answer_photo(
-            image_url,
-            caption=f"🎨 تم بنجاح!\nPrompt: {prompt}",
-            reply_markup=main_menu()
-        )
+        await message.answer_photo(image_url, caption=f"🎨 تم بنجاح!\nPrompt: {prompt}", reply_markup=main_menu())
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
 
-# تعديل صورة موجودة (Image-to-Image)
+# تعديل صورة موجودة (Image-to-Image الحقيقي)
 @dp.message(F.photo)
 async def handle_edit_image(message: types.Message):
     if not message.caption:
@@ -91,17 +87,17 @@ async def handle_edit_image(message: types.Message):
     # نحصل على رابط الصورة العام من تليجرام
     photo = message.photo[-1]
     file = await photo.get_file()
-    image_url = file.file_url   # رابط عام مهم جداً
+    image_url = file.file_url
 
-    # برومبت قوي جداً للتعديل الحقيقي
+    # برومبت قوي جداً ليجبر Grok يعدل الصورة الأصلية
     full_prompt = (
-        f"Edit the exact uploaded image: {image_url}. "
-        f"Keep the same person, same pose, same background, same lighting, same style, same everything. "
-        f"Only make this change: {edit_desc}. "
-        f"Do not change the scene or create a new image."
+        f"Edit the EXACT uploaded image: {image_url}. "
+        f"Keep the same person, same face, same pose, same background, same lighting, same clothes style, same everything. "
+        f"Only apply this change: {edit_desc}. "
+        f"Do not create a new scene or new person."
     )
 
-    msg = await message.answer("🖌️ جاري تعديل الصورة بالضبط بـ Grok Imagine...")
+    msg = await message.answer("🖌️ جاري تعديل الصورة بالضبط...")
 
     try:
         response = await client.images.generate(
@@ -114,7 +110,7 @@ async def handle_edit_image(message: types.Message):
         await msg.edit_text("✅ تم التعديل بنجاح!")
         await message.answer_photo(
             new_image_url,
-            caption=f"🖌️ تم التعديل!\nالتعديل: {edit_desc}",
+            caption=f"🖌️ تم التعديل!\n{edit_desc}",
             reply_markup=main_menu()
         )
     except Exception as e:
