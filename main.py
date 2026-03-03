@@ -20,6 +20,9 @@ client = AsyncOpenAI(
     base_url="https://api.x.ai/v1",
 )
 
+# حفظ آخر prompt لكل يوزر (بسيط في الذاكرة)
+last_prompt = {}
+
 # ==================== KEYBOARDS ====================
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -32,8 +35,9 @@ def main_menu():
     return kb
 
 def image_keyboard(prompt: str):
+    # callback_data قصيرة جداً (ما يتجاوز 64 حرف)
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 توليد جديد بنفس الوصف", callback_data=f"regenerate:{prompt}")],
+        [InlineKeyboardButton(text="🔄 توليد جديد بنفس الوصف", callback_data="regenerate")],
         [InlineKeyboardButton(text="🖌️ تعديل هذه الصورة", callback_data="edit_this")],
         [InlineKeyboardButton(text="🎥 حولها إلى فيديو", callback_data="to_video")],
         [InlineKeyboardButton(text="⬆️ تحسين الجودة", callback_data="upscale")],
@@ -60,6 +64,9 @@ async def generate_image(message: types.Message):
         await message.answer("اكتب الوصف بعد /image مثال:\n/image قطة تطير على القمر")
         return
 
+    # حفظ الـ prompt لليوزر عشان الـ regenerate
+    last_prompt[message.from_user.id] = prompt
+
     msg = await message.answer("⏳ جاري توليد الصورة بـ Grok Imagine... 🔥")
     
     try:
@@ -67,7 +74,6 @@ async def generate_image(message: types.Message):
             model="grok-imagine-image",
             prompt=prompt,
             n=1
-            # size و aspect_ratio تم إزالتهما عشان يشتغل بدون خطأ
         )
         image_url = response.data[0].url
         
@@ -83,20 +89,34 @@ async def generate_image(message: types.Message):
 @dp.callback_query()
 async def handle_buttons(callback: CallbackQuery):
     data = callback.data
-    
+    user_id = callback.from_user.id
+
     if data == "main_menu":
         await callback.message.edit_text("🏠 القائمة الرئيسية", reply_markup=main_menu())
-    
-    elif data.startswith("regenerate:"):
-        prompt = data.split(":", 1)[1]
+
+    elif data == "regenerate":
+        prompt = last_prompt.get(user_id, "قطة جميلة")
         await callback.message.answer(f"🔄 جاري إعادة التوليد...\n{prompt}")
-    
+        # نعمل توليد جديد
+        msg = await callback.message.answer("⏳ جاري توليد الصورة...")
+        try:
+            response = await client.images.generate(model="grok-imagine-image", prompt=prompt, n=1)
+            image_url = response.data[0].url
+            await msg.edit_text("✅ تم التوليد!")
+            await callback.message.answer_photo(
+                image_url,
+                caption=f"🎨 تم بنجاح!\n\nPrompt: {prompt}",
+                reply_markup=image_keyboard(prompt)
+            )
+        except Exception as e:
+            await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
+
     elif data == "edit_this":
         await callback.message.answer("📸 ارفع الصورة الآن + اكتب في الكابشن:\nedit: وصف التعديل")
-    
+
     elif data == "new_image":
         await callback.message.answer("🎨 اكتب /image + الوصف الجديد")
-    
+
     else:
         await callback.answer("⏳ قريباً إن شاء الله 🔥", show_alert=True)
 
@@ -112,7 +132,6 @@ async def handle_edit_photo(message: types.Message):
                 model="grok-imagine-image",
                 prompt=full_prompt,
                 n=1
-                # size و aspect_ratio تم إزالتهما
             )
             await message.answer_photo(
                 response.data[0].url, 
