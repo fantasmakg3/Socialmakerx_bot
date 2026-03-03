@@ -6,6 +6,7 @@ from aiogram.filters import Command
 from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 import fal_client
+from googletrans import Translator
 
 logging.basicConfig(level=logging.INFO)
 
@@ -16,6 +17,7 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 client = fal_client.AsyncClient(key=FAL_KEY)
+translator = Translator()
 
 user_last_prompt = {}
 
@@ -45,7 +47,7 @@ async def start(message: types.Message):
     await message.answer(
         "👋 مرحبا يا وحش في @Socialmakerx_bot!\n"
         "بوت Flux Pro + Kling 🔥\n\n"
-        "لأفضل نتيجة اكتب الوصف بالإنجليزي مفصل أو عربي طويل جداً",
+        "اكتب أي وصف بالعربي وسيشتغل بإذن الله",
         reply_markup=main_menu()
     )
 
@@ -60,32 +62,36 @@ async def image_menu(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "new_image")
 async def new_image(callback: CallbackQuery):
-    await callback.message.edit_text("🎨 اكتب وصف الصورة (بالإنجليزي أفضل للنتيجة المثالية)")
+    await callback.message.edit_text("🎨 اكتب وصف الصورة بالعربي (طويل ومفصل أفضل)")
 
 @dp.message(F.text)
 async def handle_prompt(message: types.Message):
     if message.text.startswith('/'):
         return
 
-    prompt = message.text.strip()
-    if len(prompt) < 5:
+    arabic_prompt = message.text.strip()
+    if len(arabic_prompt) < 5:
         await message.answer("اكتب وصف أطول شوي يا وحش 😅")
         return
 
-    user_last_prompt[message.from_user.id] = prompt
+    user_last_prompt[message.from_user.id] = arabic_prompt
 
-    # تحسين البرومبت لـ Flux (يجعله يلتزم أكثر)
-    enhanced_prompt = f"masterpiece, best quality, ultra detailed, 8k, sharp focus, cinematic lighting, {prompt}"
+    msg = await message.answer("⏳ جاري الترجمة والتوليد بـ Flux Pro (9:16)... 🔥")
 
-    msg = await message.answer("⏳ جاري التوليد بـ Flux Pro (9:16 ريلز)... 🔥")
     try:
+        # ترجمة عربي → إنجليزي
+        english = translator.translate(arabic_prompt, dest='en').text
+        
+        # prompt engineering قوي جداً
+        enhanced = f"masterpiece, best quality, ultra detailed, 8k, photorealistic, cinematic lighting, sharp focus, dynamic composition, {english}, highly detailed, vibrant colors, 9:16 vertical reel format"
+
         result = await client.subscribe(
-            "fal-ai/flux-pro",
+            "fal-ai/flux-dev",
             arguments={
-                "prompt": enhanced_prompt,
-                "image_size": {"width": 832, "height": 1472},   # 9:16 عمودي مثالي
-                "num_inference_steps": 35,
-                "guidance_scale": 7.5,
+                "prompt": enhanced,
+                "image_size": {"width": 832, "height": 1472},
+                "num_inference_steps": 40,
+                "guidance_scale": 9.0,
                 "enable_safety_checker": False
             }
         )
@@ -94,8 +100,8 @@ async def handle_prompt(message: types.Message):
         await msg.edit_text("✅ تم التوليد بـ Flux Pro!")
         await message.answer_photo(
             image_url,
-            caption=f"🎨 تم بنجاح!\nPrompt: {prompt}",
-            reply_markup=image_action_keyboard(prompt)
+            caption=f"🎨 تم بنجاح!\nالوصف: {arabic_prompt}",
+            reply_markup=image_action_keyboard(arabic_prompt)
         )
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
@@ -103,24 +109,26 @@ async def handle_prompt(message: types.Message):
 @dp.callback_query(F.data == "regenerate")
 async def regenerate(callback: CallbackQuery):
     user_id = callback.from_user.id
-    prompt = user_last_prompt.get(user_id)
-    if not prompt:
+    arabic_prompt = user_last_prompt.get(user_id)
+    if not arabic_prompt:
         await callback.answer("❌ انتهت الجلسة", show_alert=True)
         return
 
-    enhanced_prompt = f"masterpiece, best quality, ultra detailed, 8k, sharp focus, cinematic lighting, {prompt}"
     msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
     try:
-        result = await client.subscribe("fal-ai/flux-pro", arguments={
-            "prompt": enhanced_prompt,
+        english = translator.translate(arabic_prompt, dest='en').text
+        enhanced = f"masterpiece, best quality, ultra detailed, 8k, photorealistic, cinematic lighting, sharp focus, dynamic composition, {english}, highly detailed, vibrant colors, 9:16 vertical reel format"
+
+        result = await client.subscribe("fal-ai/flux-dev", arguments={
+            "prompt": enhanced,
             "image_size": {"width": 832, "height": 1472},
-            "num_inference_steps": 35,
-            "guidance_scale": 7.5,
+            "num_inference_steps": 40,
+            "guidance_scale": 9.0,
             "enable_safety_checker": False
         })
         image_url = result["images"][0]["url"]
         await msg.edit_text("✅ تم التوليد!")
-        await callback.message.answer_photo(image_url, caption=f"🎨 تم بنجاح (إعادة)!\nPrompt: {prompt}", reply_markup=image_action_keyboard(prompt))
+        await callback.message.answer_photo(image_url, caption=f"🎨 تم بنجاح (إعادة)!\nالوصف: {arabic_prompt}", reply_markup=image_action_keyboard(arabic_prompt))
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
 
