@@ -66,8 +66,8 @@ async def generate_image(message: types.Message):
         response = await client.images.generate(
             model="grok-imagine-image",
             prompt=prompt,
-            n=1,
-            aspect_ratio="1:1",      # ← تم الإصلاح هنا
+            n=1
+            # size و aspect_ratio تم إزالتهما عشان يشتغل بدون خطأ
         )
         image_url = response.data[0].url
         
@@ -90,7 +90,6 @@ async def handle_buttons(callback: CallbackQuery):
     elif data.startswith("regenerate:"):
         prompt = data.split(":", 1)[1]
         await callback.message.answer(f"🔄 جاري إعادة التوليد...\n{prompt}")
-        # يمكن توسيعها لاحقاً
     
     elif data == "edit_this":
         await callback.message.answer("📸 ارفع الصورة الآن + اكتب في الكابشن:\nedit: وصف التعديل")
@@ -112,8 +111,8 @@ async def handle_edit_photo(message: types.Message):
             response = await client.images.generate(
                 model="grok-imagine-image",
                 prompt=full_prompt,
-                n=1,
-                aspect_ratio="1:1",      # ← تم الإصلاح هنا أيضاً
+                n=1
+                # size و aspect_ratio تم إزالتهما
             )
             await message.answer_photo(
                 response.data[0].url, 
