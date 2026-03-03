@@ -5,9 +5,6 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.memory import MemoryStorage
 from openai import AsyncOpenAI
 
 logging.basicConfig(level=logging.INFO)
@@ -16,15 +13,15 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 XAI_API_KEY = os.getenv("XAI_API_KEY")
 
 bot = Bot(token=BOT_TOKEN)
-storage = MemoryStorage()
-dp = Dispatcher(storage=storage)
+dp = Dispatcher()
 
-client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
+client = AsyncOpenAI(
+    api_key=XAI_API_KEY,
+    base_url="https://api.x.ai/v1",
+)
 
-class ImageStates(StatesGroup):
-    waiting_for_prompt = State()
+user_last_prompt = {}
 
-# ==================== KEYBOARDS ====================
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎨 إنشاء صورة جديدة", callback_data="new_image")],
@@ -37,16 +34,15 @@ def main_menu():
 
 def aspect_ratio_keyboard(prompt: str):
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬜ 1:1 (مربع)", callback_data=f"ratio:1:1:{prompt}")],
-        [InlineKeyboardButton(text="📱 9:16 (ريلز عمودي)", callback_data=f"ratio:9:16:{prompt}")],
-        [InlineKeyboardButton(text="🖥️ 16:9 (ريلز أفقي)", callback_data=f"ratio:16:9:{prompt}")],
-        [InlineKeyboardButton(text="📲 4:5 (إنستا/فيسبوك)", callback_data=f"ratio:4:5:{prompt}")],
-        [InlineKeyboardButton(text="📷 3:2 (كلاسيكي)", callback_data=f"ratio:3:2:{prompt}")],
+        [InlineKeyboardButton(text="⬜ 1:1 مربع", callback_data=f"ratio:1:1:{prompt[:40]}")],
+        [InlineKeyboardButton(text="📱 9:16 ريلز عمودي", callback_data=f"ratio:9:16:{prompt[:40]}")],
+        [InlineKeyboardButton(text="🖥️ 16:9 ريلز أفقي", callback_data=f"ratio:16:9:{prompt[:40]}")],
+        [InlineKeyboardButton(text="📲 4:5 إنستا", callback_data=f"ratio:4:5:{prompt[:40]}")],
+        [InlineKeyboardButton(text="📷 3:2 كلاسيكي", callback_data=f"ratio:3:2:{prompt[:40]}")],
         [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
     ])
     return kb
 
-# ==================== HANDLERS ====================
 @dp.message(Command("start"))
 async def start(message: types.Message):
     await message.answer(
@@ -57,26 +53,34 @@ async def start(message: types.Message):
     )
 
 @dp.callback_query(F.data == "new_image")
-async def start_image_creation(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("🎨 اكتب وصف الصورة اللي تبغاها (بالعربي تماماً)\nمثال: قطة تطير على سطح القمر")
-    await state.set_state(ImageStates.waiting_for_prompt)
+async def start_new_image(callback: CallbackQuery):
+    await callback.message.edit_text(
+        "🎨 اكتب وصف الصورة اللي تبغاها (بالعربي تماماً)\n"
+        "مثال: قط جميل يمشي على سطح القمر يرتدي نظارات"
+    )
 
-@dp.message(ImageStates.waiting_for_prompt)
-async def receive_prompt(message: types.Message, state: FSMContext):
+@dp.message(F.text & \~F.text.startswith('/'))
+async def handle_any_text(message: types.Message):
     prompt = message.text.strip()
-    if not prompt:
-        await message.answer("اكتب وصف حقيقي يا وحش 😅")
+    if len(prompt) < 3:
+        await message.answer("اكتب وصف أطول شوي يا وحش 😅")
         return
 
-    await message.answer("اختر قياس الصورة 👇", reply_markup=aspect_ratio_keyboard(prompt))
-    await state.clear()
+    user_last_prompt[message.from_user.id] = prompt
+    await message.answer("✅ وصفك مسجل!\nاختر قياس الصورة 👇", reply_markup=aspect_ratio_keyboard(prompt))
 
 @dp.callback_query(F.data.startswith("ratio:"))
-async def generate_with_ratio(callback: CallbackQuery):
-    _, ratio, prompt = callback.data.split(":", 2)
-    
-    msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio}\nوصف: {prompt[:80]}...")
-    
+async def generate_image_with_ratio(callback: CallbackQuery):
+    _, ratio, short_prompt = callback.data.split(":", 2)
+    user_id = callback.from_user.id
+    prompt = user_last_prompt.get(user_id)
+
+    if not prompt:
+        await callback.answer("❌ انتهت الجلسة، اضغط إنشاء صورة جديدة مرة ثانية", show_alert=True)
+        return
+
+    msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio}")
+
     try:
         response = await client.images.generate(
             model="grok-imagine-image",
@@ -90,12 +94,11 @@ async def generate_with_ratio(callback: CallbackQuery):
         await callback.message.answer_photo(
             image_url,
             caption=f"🎨 تم بنجاح!\nقياس: {ratio}\nPrompt: {prompt}",
-            reply_markup=aspect_ratio_keyboard(prompt)  # أزرار جديدة تحت الصورة
+            reply_markup=aspect_ratio_keyboard(prompt)
         )
     except Exception as e:
-        await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
+        await msg.edit_text(f"❌ خطأ: {str(e)[:180]}")
 
-# باقي الأزرار (القديمة) للتوافق
 @dp.callback_query()
 async def other_buttons(callback: CallbackQuery):
     if callback.data == "main_menu":
