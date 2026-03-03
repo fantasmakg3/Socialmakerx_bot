@@ -1,4 +1,3 @@
 aiogram==3.13.0
 fal-client
-deep-translator
 aiofiles==23.2.1
