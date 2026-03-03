@@ -19,12 +19,32 @@ client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 user_last_prompt = {}
 
+# Prompt Engineering قوي جداً لكل قياس
+RATIO_PROMPT = {
+    "1:1": "perfect square 1:1 aspect ratio, centered composition",
+    "9:16": "EXTREMELY TALL VERTICAL 9:16 portrait reel format, the image MUST be very tall and narrow, full vertical composition, tall narrow frame, portrait orientation, height much larger than width, Instagram Reel style, vertical video format",
+    "16:9": "EXTREMELY WIDE HORIZONTAL 16:9 landscape format, the image MUST be very wide and short, full horizontal composition",
+    "4:5": "4:5 portrait aspect ratio, slightly taller than square, vertical portrait format",
+    "3:2": "classic 3:2 aspect ratio, the image must be exactly 3:2 ratio"
+}
+
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎨 إنشاء صورة جديدة", callback_data="new_image")],
         [InlineKeyboardButton(text="🎥 إنشاء فيديو", callback_data="new_video")],
         [InlineKeyboardButton(text="⭐ رصيدي اليومي", callback_data="daily_balance")],
         [InlineKeyboardButton(text="💎 ترقية Premium", callback_data="premium")]
+    ])
+    return kb
+
+def aspect_ratio_keyboard(prompt: str):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬜ 1:1 مربع", callback_data=f"ratio:1:1:{prompt[:50]}")],
+        [InlineKeyboardButton(text="📱 9:16 ريلز عمودي", callback_data=f"ratio:9:16:{prompt[:50]}")],
+        [InlineKeyboardButton(text="🖥️ 16:9 ريلز أفقي", callback_data=f"ratio:16:9:{prompt[:50]}")],
+        [InlineKeyboardButton(text="📲 4:5 إنستا", callback_data=f"ratio:4:5:{prompt[:50]}")],
+        [InlineKeyboardButton(text="📷 3:2 كلاسيكي", callback_data=f"ratio:3:2:{prompt[:50]}")],
+        [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
     ])
     return kb
 
@@ -64,24 +84,39 @@ async def handle_prompt(message: types.Message):
         return
 
     user_last_prompt[message.from_user.id] = prompt
+    await message.answer("✅ وصفك مسجل!\nاختر قياس الصورة 👇", reply_markup=aspect_ratio_keyboard(prompt))
 
-    msg = await message.answer("⏳ جاري توليد الصورة... 🔥")
+@dp.callback_query(F.data.startswith("ratio:"))
+async def generate_image(callback: CallbackQuery):
+    _, ratio_code, short_prompt = callback.data.split(":", 2)
+    user_id = callback.from_user.id
+    base_prompt = user_last_prompt.get(user_id)
+
+    if not base_prompt:
+        await callback.answer("❌ انتهت الجلسة، ابدأ من جديد", show_alert=True)
+        return
+
+    ratio_instruction = RATIO_PROMPT.get(ratio_code, "")
+    final_prompt = f"{base_prompt}, {ratio_instruction}, masterpiece, highly detailed, best quality"
+
+    msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio_code}")
+
     try:
         response = await client.images.generate(
             model="grok-imagine-image",
-            prompt=prompt,
+            prompt=final_prompt,
             n=1
         )
         image_url = response.data[0].url
 
         await msg.edit_text("✅ تم التوليد!")
-        await message.answer_photo(
+        await callback.message.answer_photo(
             image_url,
-            caption=f"🎨 تم بنجاح!\nPrompt: {prompt}",
-            reply_markup=image_action_keyboard(prompt)
+            caption=f"🎨 تم بنجاح!\nقياس: {ratio_code}\nPrompt: {base_prompt}",
+            reply_markup=image_action_keyboard(base_prompt)
         )
     except Exception as e:
-        await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
+        await msg.edit_text(f"❌ خطأ: {str(e)[:180]}")
 
 @dp.callback_query(F.data == "regenerate")
 async def regenerate(callback: CallbackQuery):
