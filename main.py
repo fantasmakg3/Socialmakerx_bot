@@ -19,13 +19,13 @@ client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 user_last_prompt = {}
 
-# Prompt engineering قوي جداً للقياسات
+# أقوى Prompt Engineering للقياسات (خاصة 9:16)
 RATIO_PROMPT = {
-    "1:1": "perfect square 1:1 aspect ratio, the image is perfectly square, centered composition",
-    "9:16": "EXTREMELY TALL VERTICAL 9:16 PORTRAIT ASPECT RATIO, the image must be very tall and narrow, full vertical reel format, portrait orientation, the entire scene is vertical, tall narrow frame, no horizontal cropping, vertical composition, 9:16 aspect ratio, tall image",
-    "16:9": "EXTREMELY WIDE HORIZONTAL 16:9 LANDSCAPE ASPECT RATIO, the image must be very wide and short, full horizontal reel format, landscape orientation, wide frame, no vertical cropping",
+    "1:1": "perfect square 1:1 aspect ratio, centered square composition",
+    "9:16": "STRICT VERTICAL 9:16 ASPECT RATIO, extremely tall and narrow portrait image, full vertical reel format, tall narrow frame, portrait orientation, the entire image must be very tall and slim, perfect Instagram Reel and TikTok vertical format, no horizontal cropping at all, tall vertical composition, 9:16 ratio, vertical reel style",
+    "16:9": "STRICT HORIZONTAL 16:9 ASPECT RATIO, extremely wide and short landscape image, full horizontal cinematic format, wide frame, landscape orientation, no vertical cropping, wide horizontal composition, 16:9 ratio",
     "4:5": "4:5 portrait aspect ratio, slightly taller than square, vertical portrait format",
-    "3:2": "classic 3:2 aspect ratio, the image must be exactly 3:2 ratio"
+    "3:2": "classic 3:2 aspect ratio, standard photo ratio"
 }
 
 def main_menu():
@@ -98,7 +98,7 @@ async def generate_image(callback: CallbackQuery):
         return
 
     ratio_instruction = RATIO_PROMPT.get(ratio_code, "")
-    final_prompt = f"{ratio_instruction}, {base_prompt}, masterpiece, highly detailed, best quality"
+    final_prompt = f"{ratio_instruction}. {base_prompt}, masterpiece, highly detailed, best quality"
 
     msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio_code}")
 
@@ -127,9 +127,9 @@ async def regenerate(callback: CallbackQuery):
         await callback.answer("❌ انتهت الجلسة", show_alert=True)
         return
 
-    ratio_code = "9:16"  # نفترض آخر قياس
+    ratio_code = "9:16"  # نفترض آخر قياس (يمكن تحسينه)
     ratio_instruction = RATIO_PROMPT.get(ratio_code, "")
-    final_prompt = f"{ratio_instruction}, {base_prompt}, masterpiece, highly detailed"
+    final_prompt = f"{ratio_instruction}. {base_prompt}, masterpiece, highly detailed"
 
     msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
     try:
