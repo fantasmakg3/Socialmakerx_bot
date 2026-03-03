@@ -59,10 +59,13 @@ async def start_new_image(callback: CallbackQuery):
         "مثال: قط جميل يمشي على سطح القمر يرتدي نظارات"
     )
 
-@dp.message(F.text & \~F.text.startswith('/'))
-async def handle_any_text(message: types.Message):
+@dp.message()
+async def handle_text(message: types.Message):
+    if message.text.startswith('/'):
+        return  # تجاهل الأوامر مثل /start
+
     prompt = message.text.strip()
-    if len(prompt) < 3:
+    if len(prompt) < 5:
         await message.answer("اكتب وصف أطول شوي يا وحش 😅")
         return
 
