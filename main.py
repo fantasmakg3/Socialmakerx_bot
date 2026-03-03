@@ -20,27 +20,41 @@ client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 user_last_prompt = {}
 user_waiting_for_edit = {}
 
+# ==================== KEYBOARDS ====================
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎨 إنشاء صورة جديدة", callback_data="new_image")],
+        [InlineKeyboardButton(text="🖼️ إنشاء / تعديل صور", callback_data="image_menu")],
         [InlineKeyboardButton(text="🎥 إنشاء فيديو", callback_data="new_video")],
-        [InlineKeyboardButton(text="⭐ رصيدي اليومي", callback_data="daily_balance")],
-        [InlineKeyboardButton(text="💎 ترقية Premium", callback_data="premium")]
+        [InlineKeyboardButton(text="👤 حساب المستخدم", callback_data="user_account")],
+        [InlineKeyboardButton(text="💎 ترقية الحساب", callback_data="premium")],
+        [
+            InlineKeyboardButton(text="🇸🇦 عربي", callback_data="lang_ar"),
+            InlineKeyboardButton(text="🇬🇧 English", callback_data="lang_en")
+        ]
+    ])
+    return kb
+
+def image_submenu():
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎨 إنشاء صورة جديدة", callback_data="new_image")],
+        [InlineKeyboardButton(text="🖌️ تعديل صورة", callback_data="edit_image")],
+        [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
     ])
     return kb
 
 def image_action_keyboard(prompt: str):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔄 توليد جديد بنفس الوصف", callback_data="regenerate")],
-        [InlineKeyboardButton(text="🖌️ تعديل هذه الصورة", callback_data="edit_this")],
-        [InlineKeyboardButton(text="🎥 حولها إلى فيديو", callback_data="to_video")],
         [InlineKeyboardButton(text="⬆️ تحسين الجودة", callback_data="upscale")],
-        [InlineKeyboardButton(text="❤️ حفظ", callback_data="save"), 
-         InlineKeyboardButton(text="📤 مشاركة", callback_data="share")],
+        [
+            InlineKeyboardButton(text="❤️ حفظ", callback_data="save"),
+            InlineKeyboardButton(text="📤 مشاركة", callback_data="share")
+        ],
         [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
     ])
     return kb
 
+# ==================== HANDLERS ====================
 @dp.message(Command("start"))
 async def start(message: types.Message):
     await message.answer(
@@ -50,29 +64,40 @@ async def start(message: types.Message):
         reply_markup=main_menu()
     )
 
+@dp.callback_query(F.data == "image_menu")
+async def image_menu(callback: CallbackQuery):
+    await callback.message.edit_text("🖼️ اختر الخدمة:", reply_markup=image_submenu())
+
 @dp.callback_query(F.data == "new_image")
-async def start_new_image(callback: CallbackQuery):
+async def new_image(callback: CallbackQuery):
     await callback.message.edit_text("🎨 اكتب وصف الصورة اللي تبغاها (بالعربي تماماً)")
+
+@dp.callback_query(F.data == "edit_image")
+async def edit_image(callback: CallbackQuery):
+    user_waiting_for_edit[callback.from_user.id] = True
+    await callback.message.answer("📸 ارفع الصورة اللي تبغى تعدلها + اكتب في الكابشن وصف التعديل\nمثال: edit: حولها لأنمي")
 
 @dp.message(F.text)
 async def handle_text(message: types.Message):
     user_id = message.from_user.id
-    text = message.text.strip()
 
     # وضع التعديل
     if user_waiting_for_edit.get(user_id, False):
-        base_prompt = user_last_prompt.get(user_id, "")
-        edit_prompt = f"Edit this image: {text}"
-        msg = await message.answer("🖌️ جاري تعديل الصورة السابقة...")
+        edit_desc = message.text.strip()
+        msg = await message.answer("🖌️ جاري تعديل الصورة...")
         try:
             response = await client.images.generate(
                 model="grok-imagine-image",
-                prompt=edit_prompt,
+                prompt=f"Edit this image: {edit_desc}",
                 n=1
             )
             image_url = response.data[0].url
             await msg.edit_text("✅ تم التعديل!")
-            await message.answer_photo(image_url, caption=f"🖌️ تم التعديل!\n{text}", reply_markup=image_action_keyboard(text))
+            await message.answer_photo(
+                image_url,
+                caption=f"🖌️ تم التعديل!\n{edit_desc}",
+                reply_markup=image_action_keyboard(edit_desc)
+            )
             user_waiting_for_edit[user_id] = False
         except Exception as e:
             await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
@@ -80,16 +105,18 @@ async def handle_text(message: types.Message):
         return
 
     # توليد صورة عادية
-    if len(text) < 5:
+    prompt = message.text.strip()
+    if len(prompt) < 5:
         await message.answer("اكتب وصف أطول شوي يا وحش 😅")
         return
 
-    user_last_prompt[user_id] = text
+    user_last_prompt[user_id] = prompt
+
     msg = await message.answer("⏳ جاري توليد الصورة... 🔥")
     try:
         response = await client.images.generate(
             model="grok-imagine-image",
-            prompt=text,
+            prompt=prompt,
             n=1
         )
         image_url = response.data[0].url
@@ -97,17 +124,11 @@ async def handle_text(message: types.Message):
         await msg.edit_text("✅ تم التوليد!")
         await message.answer_photo(
             image_url,
-            caption=f"🎨 تم بنجاح!\nPrompt: {text}",
-            reply_markup=image_action_keyboard(text)
+            caption=f"🎨 تم بنجاح!\nPrompt: {prompt}",
+            reply_markup=image_action_keyboard(prompt)
         )
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
-
-@dp.callback_query(F.data == "edit_this")
-async def edit_this(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    user_waiting_for_edit[user_id] = True
-    await callback.message.answer("🖌️ اكتب وصف التعديل اللي تبغاه على هذه الصورة\nمثال: حولها لأنمي، غير الخلفية لشاطئ، اجعلها كرتون...")
 
 @dp.callback_query(F.data == "regenerate")
 async def regenerate(callback: CallbackQuery):
