@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import aiohttp
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram import F
@@ -17,7 +18,7 @@ dp = Dispatcher()
 
 client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
-user_last_prompt = {}
+PASSWORD = "onlykggrok"   # كلمة مرور ثابتة لكل الصور
 
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -31,7 +32,7 @@ def main_menu():
 async def start(message: types.Message):
     await message.answer(
         "👋 مرحبا يا وحش في @Socialmakerx_bot!\n"
-        "Grok Imagine الرسمي (يدعم تعديل الصور) 🔥\n\n"
+        "Grok Imagine + Temp-Image (خصوصية عالية) 🔥\n\n"
         "اختر اللي تبغاه:",
         reply_markup=main_menu()
     )
@@ -53,29 +54,21 @@ async def edit_image(callback: CallbackQuery):
 async def handle_new_image(message: types.Message):
     if message.text.startswith('/'):
         return
-
     prompt = message.text.strip()
     if len(prompt) < 5:
         await message.answer("اكتب وصف أطول شوي يا وحش 😅")
         return
 
-    user_last_prompt[message.from_user.id] = prompt
-
     msg = await message.answer("⏳ جاري التوليد...")
     try:
-        response = await client.images.generate(
-            model="grok-imagine-image",
-            prompt=prompt,
-            n=1
-        )
+        response = await client.images.generate(model="grok-imagine-image", prompt=prompt, n=1)
         image_url = response.data[0].url
-
         await msg.edit_text("✅ تم التوليد!")
         await message.answer_photo(image_url, caption=f"🎨 تم بنجاح!\nPrompt: {prompt}", reply_markup=main_menu())
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
 
-# تعديل صورة موجودة (Image-to-Image الحقيقي)
+# تعديل صورة موجودة (مع رفع على Temp-Image.com)
 @dp.message(F.photo)
 async def handle_edit_image(message: types.Message):
     if not message.caption:
@@ -84,20 +77,36 @@ async def handle_edit_image(message: types.Message):
 
     edit_desc = message.caption.strip()
 
-    # نحصل على رابط الصورة العام من تليجرام
     photo = message.photo[-1]
     file = await photo.get_file()
-    image_url = file.file_url
+    file_bytes = await bot.download_file(file.file_path)
 
-    # برومبت قوي جداً ليجبر Grok يعدل الصورة الأصلية
+    msg = await message.answer("📤 جاري رفع الصورة بأمان على Temp-Image (5 دقايق + باسورد)...")
+
+    # رفع على Temp-Image.com
+    async with aiohttp.ClientSession() as session:
+        data = aiohttp.FormData()
+        data.add_field('file', file_bytes, filename='image.jpg', content_type='image/jpeg')
+        data.add_field('expiration', '5')   # 5 دقايق
+        data.add_field('password', PASSWORD)
+
+        async with session.post('https://temp-image.com/upload', data=data) as resp:
+            result = await resp.json()
+            image_url = result.get('url')
+
+    if not image_url:
+        await msg.edit_text("❌ فشل رفع الصورة، حاول مرة ثانية")
+        return
+
     full_prompt = (
         f"Edit the EXACT uploaded image: {image_url}. "
-        f"Keep the same person, same face, same pose, same background, same lighting, same clothes style, same everything. "
+        f"Password: {PASSWORD}. "
+        f"Keep the same person, same face, same pose, same background, same lighting, same everything. "
         f"Only apply this change: {edit_desc}. "
-        f"Do not create a new scene or new person."
+        f"Do not create a new scene."
     )
 
-    msg = await message.answer("🖌️ جاري تعديل الصورة بالضبط...")
+    await msg.edit_text("🖌️ جاري تعديل الصورة بالضبط بـ Grok...")
 
     try:
         response = await client.images.generate(
