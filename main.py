@@ -4,6 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram import F
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from openai import AsyncOpenAI
 
 logging.basicConfig(level=logging.INFO)
@@ -19,27 +20,47 @@ client = AsyncOpenAI(
     base_url="https://api.x.ai/v1",
 )
 
+# ==================== KEYBOARDS ====================
+def main_menu():
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎨 إنشاء صورة جديدة", callback_data="new_image")],
+        [InlineKeyboardButton(text="🎥 إنشاء فيديو", callback_data="new_video")],
+        [InlineKeyboardButton(text="🖼️ تعديل صورة", callback_data="edit_mode")],
+        [InlineKeyboardButton(text="⭐ رصيدي اليومي", callback_data="daily_balance")],
+        [InlineKeyboardButton(text="💎 ترقية Premium", callback_data="premium")]
+    ])
+    return kb
+
+def image_keyboard(prompt: str):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 توليد جديد بنفس الوصف", callback_data=f"regenerate:{prompt}")],
+        [InlineKeyboardButton(text="🖌️ تعديل هذه الصورة", callback_data="edit_this")],
+        [InlineKeyboardButton(text="🎥 حولها إلى فيديو", callback_data="to_video")],
+        [InlineKeyboardButton(text="⬆️ تحسين الجودة", callback_data="upscale")],
+        [InlineKeyboardButton(text="❤️ حفظ", callback_data="save"), 
+         InlineKeyboardButton(text="📤 مشاركة", callback_data="share")],
+        [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
+    ])
+    return kb
+
+# ==================== HANDLERS ====================
 @dp.message(Command("start"))
 async def start(message: types.Message):
     await message.answer(
-        "👋 مرحبا يا وحش في @Socialmakerx_bot!\n\n"
-        "أنا بوت Grok Imagine مجاني 100% داخل تليجرام 🔥\n\n"
-        "الأوامر:\n"
-        "/image [وصف] → صورة من نص\n"
-        "/edit → ارفع صورة + اكتب في الكابشن 'edit: التعديل الجديد'\n"
-        "/video [وصف] → فيديو قصير (قريباً)\n"
-        "/help → مساعدة\n\n"
-        "جرب الحين: /image قطة تطير على القمر"
+        "👋 مرحبا يا وحش في @Socialmakerx_bot!\n"
+        "بوت Grok Imagine مجاني 100% داخل تليجرام 🔥\n\n"
+        "اختر اللي تبغاه 👇",
+        reply_markup=main_menu()
     )
 
 @dp.message(Command("image"))
 async def generate_image(message: types.Message):
     prompt = message.text.replace("/image", "").strip()
     if not prompt:
-        await message.answer("اكتب الوصف بعد /image مثال:\n/image قطة تطير في الفضاء")
+        await message.answer("اكتب الوصف بعد /image مثال:\n/image قطة تطير على القمر")
         return
-    
-    await message.answer("⏳ جاري توليد الصورة بـ Grok Imagine... (ثواني)")
+
+    msg = await message.answer("⏳ جاري توليد الصورة بـ Grok Imagine... 🔥")
     
     try:
         response = await client.images.generate(
@@ -49,39 +70,52 @@ async def generate_image(message: types.Message):
             size="1024x1024",
         )
         image_url = response.data[0].url
+        
+        await msg.edit_text("✅ تم التوليد!")
         await message.answer_photo(
             image_url,
-            caption=f"✅ تم بنجاح!\n\nPrompt: {prompt}\n\nPowered by Grok Imagine 🔥"
+            caption=f"🎨 تم بنجاح!\n\nPrompt: {prompt}",
+            reply_markup=image_keyboard(prompt)
         )
     except Exception as e:
-        await message.answer(f"❌ خطأ: {str(e)[:300]}")
+        await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
+
+@dp.callback_query()
+async def handle_buttons(callback: CallbackQuery):
+    data = callback.data
+    
+    if data == "main_menu":
+        await callback.message.edit_text("🏠 القائمة الرئيسية", reply_markup=main_menu())
+    
+    elif data.startswith("regenerate:"):
+        prompt = data.split(":", 1)[1]
+        await callback.message.answer(f"🔄 جاري إعادة توليد بنفس الوصف:\n{prompt}")
+        # هنا يمكن إعادة استدعاء generate_image لاحقاً
+    
+    elif data == "edit_this":
+        await callback.message.answer("📸 ارفع الصورة الآن + اكتب في الكابشن:\nedit: وصف التعديل")
+    
+    elif data == "new_image":
+        await callback.message.answer("🎨 اكتب /image + الوصف الجديد")
+    
+    # أزرار أخرى حالياً تعطي رسالة قادم قريباً
+    else:
+        await callback.answer("⏳ قريباً إن شاء الله 🔥", show_alert=True)
 
 @dp.message(F.photo)
 async def handle_edit_photo(message: types.Message):
     if message.caption and ("edit" in message.caption.lower() or "تعديل" in message.caption):
-        prompt = message.caption.lower().replace("edit:", "").replace("edit", "").replace("تعديل:", "").strip()
-        if not prompt:
-            prompt = "حسن الصورة واجعلها أجمل"
-        await message.answer("⏳ جاري تعديل الصورة...")
-        # في النسخة الأولى نعمل prompt قوي مع وصف الصورة الأصلية (الـ API يدعم edit لاحقاً)
+        prompt = message.caption.lower().replace("edit:", "").replace("edit", "").replace("تعديل:", "").strip() or "حسن الصورة"
+        await message.answer("🖌️ جاري التعديل...")
+        # (نفس الكود القديم للتعديل)
         full_prompt = f"Edit this image: {prompt}"
         try:
-            response = await client.images.generate(
-                model="grok-imagine-image",
-                prompt=full_prompt,
-                n=1,
-                size="1024x1024",
-            )
-            image_url = response.data[0].url
-            await message.answer_photo(image_url, caption=f"✅ تم التعديل!\nPrompt: {prompt}")
+            response = await client.images.generate(model="grok-imagine-image", prompt=full_prompt, n=1, size="1024x1024")
+            await message.answer_photo(response.data[0].url, caption=f"✅ تم التعديل!\n{prompt}", reply_markup=image_keyboard(prompt))
         except Exception as e:
-            await message.answer(f"❌ خطأ في التعديل: {str(e)[:200]}")
+            await message.answer(f"❌ {str(e)[:150]}")
     else:
-        await message.answer("📸 صورة وصلت!\nاكتب في رسالة جديدة مع نفس الصورة:\nedit: وصف التعديل اللي تبغاه\nمثال: edit: حولها لأنمي")
-
-@dp.message(Command("help"))
-async def help_cmd(message: types.Message):
-    await message.answer("الأوامر:\n/start\n/image [وصف]\nارفع صورة + edit: ...\n\nكل شيء يشتغل على Grok Imagine الرسمي من xAI")
+        await message.answer("📸 ارفع صورة + اكتب edit: التعديل في الكابشن")
 
 async def main():
     await dp.start_polling(bot)
