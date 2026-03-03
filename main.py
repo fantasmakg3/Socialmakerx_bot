@@ -21,15 +21,8 @@ user_last_prompt = {}
 
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🖼️ إنشاء / تعديل صور", callback_data="image_menu")],
-        [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
-    ])
-    return kb
-
-def image_menu_keyboard():
-    kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎨 إنشاء صورة جديدة", callback_data="new_image")],
-        [InlineKeyboardButton(text="🖌️ تعديل الصورة", callback_data="edit_image")],
+        [InlineKeyboardButton(text="🖌️ تعديل صورة موجودة", callback_data="edit_image")],
         [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
     ])
     return kb
@@ -38,14 +31,10 @@ def image_menu_keyboard():
 async def start(message: types.Message):
     await message.answer(
         "👋 مرحبا يا وحش في @Socialmakerx_bot!\n"
-        "Grok Imagine الرسمي 🔥\n\n"
+        "Grok Imagine الرسمي (يدعم تعديل الصور) 🔥\n\n"
         "اختر اللي تبغاه:",
         reply_markup=main_menu()
     )
-
-@dp.callback_query(F.data == "image_menu")
-async def show_image_menu(callback: CallbackQuery):
-    await callback.message.edit_text("🖼️ اختر الخدمة:", reply_markup=image_menu_keyboard())
 
 @dp.callback_query(F.data == "new_image")
 async def new_image(callback: CallbackQuery):
@@ -55,12 +44,13 @@ async def new_image(callback: CallbackQuery):
 async def edit_image(callback: CallbackQuery):
     await callback.message.answer(
         "📸 ارفع الصورة اللي تبغى تعدلها\n"
-        "واكتب في الكابشن وصف التعديل\n"
-        "مثال: غير لون القط إلى الزهري"
+        "واكتب في الكابشن وصف التعديل فقط\n"
+        "مثال: غير لون التيشيرت إلى الزهري"
     )
 
+# إنشاء صورة جديدة
 @dp.message(F.text)
-async def handle_text(message: types.Message):
+async def handle_new_image(message: types.Message):
     if message.text.startswith('/'):
         return
 
@@ -89,26 +79,41 @@ async def handle_text(message: types.Message):
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
 
+# تعديل صورة موجودة (Image-to-Image)
 @dp.message(F.photo)
-async def handle_photo_edit(message: types.Message):
+async def handle_edit_image(message: types.Message):
     if not message.caption:
-        await message.answer("❌ لازم تكتب وصف التعديل في الكابشن")
+        await message.answer("❌ ارفع الصورة + اكتب في الكابشن وصف التعديل")
         return
 
     edit_desc = message.caption.strip()
-    msg = await message.answer("🖌️ جاري تعديل الصورة بـ grok-imagine-image-pro...")
+
+    # نحصل على رابط الصورة العام من تليجرام
+    photo = message.photo[-1]
+    file = await photo.get_file()
+    image_url = file.file_url   # رابط عام مهم جداً
+
+    # برومبت قوي جداً للتعديل الحقيقي
+    full_prompt = (
+        f"Edit the exact uploaded image: {image_url}. "
+        f"Keep the same person, same pose, same background, same lighting, same style, same everything. "
+        f"Only make this change: {edit_desc}. "
+        f"Do not change the scene or create a new image."
+    )
+
+    msg = await message.answer("🖌️ جاري تعديل الصورة بالضبط بـ Grok Imagine...")
 
     try:
         response = await client.images.generate(
-            model="grok-imagine-image-pro",   # ← النموذج الـ Pro للتعديل
-            prompt=f"Edit this image: {edit_desc}",
+            model="grok-imagine-image",
+            prompt=full_prompt,
             n=1
         )
-        image_url = response.data[0].url
+        new_image_url = response.data[0].url
 
-        await msg.edit_text("✅ تم التعديل بـ Pro!")
+        await msg.edit_text("✅ تم التعديل بنجاح!")
         await message.answer_photo(
-            image_url,
+            new_image_url,
             caption=f"🖌️ تم التعديل!\nالتعديل: {edit_desc}",
             reply_markup=main_menu()
         )
