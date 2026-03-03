@@ -5,37 +5,23 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-import fal_client
+from openai import AsyncOpenAI
 
 logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-FAL_KEY = os.getenv("FAL_KEY")
+XAI_API_KEY = os.getenv("XAI_API_KEY")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-client = fal_client.AsyncClient(key=FAL_KEY)
+client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 user_last_prompt = {}
 
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🖼️ إنشاء / تعديل صور", callback_data="image_menu")],
-        [InlineKeyboardButton(text="🎥 إنشاء فيديو 5 ثواني", callback_data="new_video")],
-        [InlineKeyboardButton(text="⭐ رصيدي اليومي", callback_data="daily_balance")],
-        [InlineKeyboardButton(text="💎 ترقية الحساب", callback_data="premium")]
-    ])
-    return kb
-
-def image_action_keyboard(prompt: str):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 توليد جديد", callback_data="regenerate")],
-        [InlineKeyboardButton(text="🖌️ تعديل هذه الصورة", callback_data="edit_this")],
-        [InlineKeyboardButton(text="🎥 حولها إلى فيديو", callback_data="to_video")],
-        [InlineKeyboardButton(text="⬆️ تحسين الجودة", callback_data="upscale")],
-        [InlineKeyboardButton(text="❤️ حفظ", callback_data="save"), 
-         InlineKeyboardButton(text="📤 مشاركة", callback_data="share")],
+        [InlineKeyboardButton(text="🎨 إنشاء صورة", callback_data="new_image")],
         [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
     ])
     return kb
@@ -44,94 +30,74 @@ def image_action_keyboard(prompt: str):
 async def start(message: types.Message):
     await message.answer(
         "👋 مرحبا يا وحش في @Socialmakerx_bot!\n"
-        "بوت Ideogram V3 🔥 (يدعم العربي مباشرة)\n\n"
-        "اكتب أي وصف بالعربي وسيفهمك تمام",
+        "بوت Grok Imagine الرسمي 🔥\n\n"
+        "اضغط على الزر و اكتب الوصف",
         reply_markup=main_menu()
     )
 
-@dp.callback_query(F.data == "image_menu")
-async def image_menu(callback: CallbackQuery):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎨 إنشاء صورة جديدة", callback_data="new_image")],
-        [InlineKeyboardButton(text="🖌️ تعديل صورة", callback_data="edit_image")],
-        [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
-    ])
-    await callback.message.edit_text("🖼️ اختر الخدمة:", reply_markup=kb)
-
 @dp.callback_query(F.data == "new_image")
 async def new_image(callback: CallbackQuery):
-    await callback.message.edit_text("🎨 اكتب وصف الصورة بالعربي (طويل ومفصل أفضل)")
+    await callback.message.edit_text("🎨 اكتب وصف الصورة بالعربي (طويل أفضل)")
 
 @dp.message(F.text)
-async def handle_prompt(message: types.Message):
+async def handle_text(message: types.Message):
     if message.text.startswith('/'):
         return
 
-    arabic_prompt = message.text.strip()
-    if len(arabic_prompt) < 5:
+    prompt = message.text.strip()
+    if len(prompt) < 5:
         await message.answer("اكتب وصف أطول شوي يا وحش 😅")
         return
 
-    user_last_prompt[message.from_user.id] = arabic_prompt
+    user_last_prompt[message.from_user.id] = prompt
 
-    msg = await message.answer("⏳ جاري التوليد بـ Ideogram V3... 🔥")
-
+    msg = await message.answer("⏳ جاري التوليد بـ Grok Imagine... 🔥")
     try:
-        enhanced = f"masterpiece, best quality, ultra detailed, 8k, photorealistic, cinematic lighting, sharp focus, dynamic composition, vibrant colors, 9:16 vertical reel format, {arabic_prompt}"
-
-        result = await client.subscribe(
-            "fal-ai/ideogram/v3",
-            arguments={
-                "prompt": enhanced,
-                "image_size": {"width": 832, "height": 1472},
-                "num_inference_steps": 40,
-                "guidance_scale": 9.0
-            }
+        response = await client.images.generate(
+            model="grok-imagine-image",
+            prompt=prompt,
+            n=1
         )
-        image_url = result["images"][0]["url"]
+        image_url = response.data[0].url
 
-        await msg.edit_text("✅ تم التوليد بـ Ideogram V3!")
+        await msg.edit_text("✅ تم التوليد!")
         await message.answer_photo(
             image_url,
-            caption=f"🎨 تم بنجاح!\nالوصف: {arabic_prompt}",
-            reply_markup=image_action_keyboard(arabic_prompt)
+            caption=f"🎨 تم بنجاح!\nPrompt: {prompt}",
+            reply_markup=main_menu()
         )
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
 
-@dp.callback_query(F.data == "regenerate")
-async def regenerate(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    arabic_prompt = user_last_prompt.get(user_id)
-    if not arabic_prompt:
-        await callback.answer("❌ انتهت الجلسة", show_alert=True)
+@dp.message(F.photo)
+async def handle_edit(message: types.Message):
+    if not message.caption:
+        await message.answer("ارفع الصورة + اكتب في الكابشن وصف التعديل\nمثال: غير لون القط إلى الزهري")
         return
 
-    msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
+    edit_desc = message.caption.strip()
+    msg = await message.answer("🖌️ جاري تعديل الصورة بـ Grok Imagine...")
+
     try:
-        enhanced = f"masterpiece, best quality, ultra detailed, 8k, photorealistic, cinematic lighting, sharp focus, dynamic composition, vibrant colors, 9:16 vertical reel format, {arabic_prompt}"
-
-        result = await client.subscribe(
-            "fal-ai/ideogram/v3",
-            arguments={
-                "prompt": enhanced,
-                "image_size": {"width": 832, "height": 1472},
-                "num_inference_steps": 40,
-                "guidance_scale": 9.0
-            }
+        response = await client.images.generate(
+            model="grok-imagine-image",
+            prompt=f"Edit this image: {edit_desc}",
+            n=1
         )
-        image_url = result["images"][0]["url"]
-        await msg.edit_text("✅ تم التوليد!")
-        await callback.message.answer_photo(image_url, caption=f"🎨 تم بنجاح (إعادة)!\nالوصف: {arabic_prompt}", reply_markup=image_action_keyboard(arabic_prompt))
-    except Exception as e:
-        await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
+        image_url = response.data[0].url
 
-@dp.callback_query()
-async def other_buttons(callback: CallbackQuery):
-    if callback.data == "main_menu":
-        await callback.message.edit_text("🏠 القائمة الرئيسية", reply_markup=main_menu())
-    else:
-        await callback.answer("⏳ قريباً إن شاء الله 🔥", show_alert=True)
+        await msg.edit_text("✅ تم التعديل!")
+        await message.answer_photo(
+            image_url,
+            caption=f"🖌️ تم التعديل!\n{edit_desc}",
+            reply_markup=main_menu()
+        )
+    except Exception as e:
+        await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
+
+@dp.callback_query(F.data == "main_menu")
+async def back_to_menu(callback: CallbackQuery):
+    await callback.message.edit_text("🏠 القائمة الرئيسية", reply_markup=main_menu())
 
 async def main():
     await dp.start_polling(bot)
