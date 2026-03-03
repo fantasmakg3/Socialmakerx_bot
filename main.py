@@ -19,32 +19,12 @@ client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 user_last_prompt = {}
 
-RATIO_PROMPT = {
-    "1:1": "perfect square 1:1 aspect ratio",
-    "9:16": "EXTREMELY TALL VERTICAL 9:16 ASPECT RATIO, the image MUST be very tall and narrow, height is twice the width, full vertical composition, Instagram Reel style, tall portrait image, vertical orientation, do not generate square or horizontal image, tall narrow frame, portrait format only",
-    "16:9": "EXTREMELY WIDE HORIZONTAL 16:9 ASPECT RATIO, the image MUST be very wide and short, full horizontal landscape format, wide frame, do not generate vertical or square image",
-    "4:5": "4:5 portrait aspect ratio, slightly taller than square",
-    "3:2": "classic 3:2 aspect ratio"
-}
-
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎨 إنشاء صورة جديدة", callback_data="new_image")],
         [InlineKeyboardButton(text="🎥 إنشاء فيديو", callback_data="new_video")],
-        [InlineKeyboardButton(text="🖼️ تعديل صورة", callback_data="edit_mode")],
         [InlineKeyboardButton(text="⭐ رصيدي اليومي", callback_data="daily_balance")],
         [InlineKeyboardButton(text="💎 ترقية Premium", callback_data="premium")]
-    ])
-    return kb
-
-def aspect_ratio_keyboard():
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬜ 1:1 مربع", callback_data="ratio:1:1")],
-        [InlineKeyboardButton(text="📱 9:16 ريلز عمودي", callback_data="ratio:9:16")],
-        [InlineKeyboardButton(text="🖥️ 16:9 ريلز أفقي", callback_data="ratio:16:9")],
-        [InlineKeyboardButton(text="📲 4:5 إنستا", callback_data="ratio:4:5")],
-        [InlineKeyboardButton(text="📷 3:2 كلاسيكي", callback_data="ratio:3:2")],
-        [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data="main_menu")]
     ])
     return kb
 
@@ -71,10 +51,7 @@ async def start(message: types.Message):
 
 @dp.callback_query(F.data == "new_image")
 async def start_new_image(callback: CallbackQuery):
-    await callback.message.edit_text(
-        "🎨 اكتب وصف الصورة اللي تبغاها (بالعربي تماماً)\n"
-        "مثال: قط جميل يمشي على سطح القمر يرتدي نظارات"
-    )
+    await callback.message.edit_text("🎨 اكتب وصف الصورة اللي تبغاها (بالعربي تماماً)")
 
 @dp.message(F.text)
 async def handle_prompt(message: types.Message):
@@ -87,71 +64,85 @@ async def handle_prompt(message: types.Message):
         return
 
     user_last_prompt[message.from_user.id] = prompt
-    await message.answer("✅ وصفك مسجل!\nاختر قياس الصورة 👇", reply_markup=aspect_ratio_keyboard())
 
-@dp.callback_query(F.data.startswith("ratio:"))
-async def generate_image(callback: CallbackQuery):
-    ratio_code = callback.data.split(":")[1]
-    user_id = callback.from_user.id
-    base_prompt = user_last_prompt.get(user_id)
-
-    if not base_prompt:
-        await callback.answer("❌ انتهت الجلسة، اضغط إنشاء صورة جديدة", show_alert=True)
-        return
-
-    ratio_instruction = RATIO_PROMPT.get(ratio_code, "")
-    final_prompt = f"{ratio_instruction}, {base_prompt}, masterpiece, highly detailed, best quality"
-
-    msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio_code}")
-
+    msg = await message.answer("⏳ جاري توليد الصورة... 🔥")
     try:
         response = await client.images.generate(
             model="grok-imagine-image",
-            prompt=final_prompt,
+            prompt=prompt,
             n=1
         )
         image_url = response.data[0].url
 
         await msg.edit_text("✅ تم التوليد!")
-        await callback.message.answer_photo(
+        await message.answer_photo(
             image_url,
-            caption=f"🎨 تم بنجاح!\nقياس: {ratio_code}\nPrompt: {base_prompt}",
-            reply_markup=image_action_keyboard(base_prompt)
+            caption=f"🎨 تم بنجاح!\nPrompt: {prompt}",
+            reply_markup=image_action_keyboard(prompt)
         )
     except Exception as e:
-        await msg.edit_text(f"❌ خطأ: {str(e)[:180]}")
+        await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
 
 @dp.callback_query(F.data == "regenerate")
 async def regenerate(callback: CallbackQuery):
     user_id = callback.from_user.id
-    base_prompt = user_last_prompt.get(user_id)
-    if not base_prompt:
+    prompt = user_last_prompt.get(user_id)
+    if not prompt:
         await callback.answer("❌ انتهت الجلسة", show_alert=True)
         return
 
-    ratio_code = "9:16"
-    ratio_instruction = RATIO_PROMPT.get(ratio_code, "")
-    final_prompt = f"{ratio_instruction}, {base_prompt}, masterpiece, highly detailed"
-
     msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
     try:
-        response = await client.images.generate(model="grok-imagine-image", prompt=final_prompt, n=1)
+        response = await client.images.generate(model="grok-imagine-image", prompt=prompt, n=1)
         image_url = response.data[0].url
         await msg.edit_text("✅ تم التوليد!")
         await callback.message.answer_photo(
             image_url,
-            caption=f"🎨 تم بنجاح (إعادة توليد)!\nقياس: {ratio_code}\nPrompt: {base_prompt}",
-            reply_markup=image_action_keyboard(base_prompt)
+            caption=f"🎨 تم بنجاح (إعادة توليد)!\nPrompt: {prompt}",
+            reply_markup=image_action_keyboard(prompt)
         )
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
 
-@dp.callback_query()
-async def other_buttons(callback: CallbackQuery):
-    if callback.data == "main_menu":
-        await callback.message.edit_text("🏠 القائمة الرئيسية", reply_markup=main_menu())
+@dp.callback_query(F.data == "edit_this")
+async def edit_this(callback: CallbackQuery):
+    await callback.answer("📸 ارفع الصورة الآن + اكتب في الكابشن:\nedit: وصف التعديل", show_alert=True)
+
+@dp.callback_query(F.data == "to_video")
+async def to_video(callback: CallbackQuery):
+    await callback.answer("🎥 تحويل إلى فيديو قريباً إن شاء الله 🔥", show_alert=True)
+
+@dp.callback_query(F.data == "upscale")
+async def upscale(callback: CallbackQuery):
+    await callback.answer("⬆️ تحسين الجودة قريباً إن شاء الله 🔥", show_alert=True)
+
+@dp.callback_query(F.data == "save")
+async def save(callback: CallbackQuery):
+    await callback.answer("❤️ تم الحفظ في المفضلة!", show_alert=True)
+
+@dp.callback_query(F.data == "share")
+async def share(callback: CallbackQuery):
+    await callback.answer("📤 تم مشاركة الصورة!", show_alert=True)
+
+@dp.callback_query(F.data == "main_menu")
+async def main_menu_callback(callback: CallbackQuery):
+    await callback.message.edit_text("🏠 القائمة الرئيسية", reply_markup=main_menu())
+
+@dp.message(F.photo)
+async def handle_edit_photo(message: types.Message):
+    if message.caption and ("edit" in message.caption.lower() or "تعديل" in message.caption):
+        edit_text = message.caption.lower().replace("edit:", "").replace("تعديل:", "").strip() or "حسن الصورة"
+        prompt = f"Edit this image: {edit_text}"
+        msg = await message.answer("🖌️ جاري التعديل...")
+        try:
+            response = await client.images.generate(model="grok-imagine-image", prompt=prompt, n=1)
+            image_url = response.data[0].url
+            await msg.edit_text("✅ تم التعديل!")
+            await message.answer_photo(image_url, caption=f"🖌️ تم التعديل!\n{edit_text}", reply_markup=image_action_keyboard(edit_text))
+        except Exception as e:
+            await msg.edit_text(f"❌ خطأ: {str(e)[:150]}")
     else:
-        await callback.answer("⏳ قريباً إن شاء الله 🔥", show_alert=True)
+        await message.answer("📸 ارفع الصورة + اكتب في الكابشن:\nedit: وصف التعديل")
 
 async def main():
     await dp.start_polling(bot)
