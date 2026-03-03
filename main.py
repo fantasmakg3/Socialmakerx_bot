@@ -6,7 +6,6 @@ from aiogram.filters import Command
 from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 import fal_client
-from deep_translator import GoogleTranslator
 
 logging.basicConfig(level=logging.INFO)
 
@@ -17,7 +16,6 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 client = fal_client.AsyncClient(key=FAL_KEY)
-translator = GoogleTranslator(source='ar', target='en')
 
 user_last_prompt = {}
 
@@ -46,8 +44,8 @@ def image_action_keyboard(prompt: str):
 async def start(message: types.Message):
     await message.answer(
         "👋 مرحبا يا وحش في @Socialmakerx_bot!\n"
-        "بوت Ideogram V3 🔥 (أفضل نموذج للبرومبت العربي)\n\n"
-        "اكتب وصف الصورة بالعربي",
+        "بوت Ideogram V3 🔥 (يدعم العربي مباشرة)\n\n"
+        "اكتب أي وصف بالعربي وسيفهمك تمام",
         reply_markup=main_menu()
     )
 
@@ -62,7 +60,7 @@ async def image_menu(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "new_image")
 async def new_image(callback: CallbackQuery):
-    await callback.message.edit_text("🎨 اكتب وصف الصورة بالعربي (طويل أفضل)")
+    await callback.message.edit_text("🎨 اكتب وصف الصورة بالعربي (طويل ومفصل أفضل)")
 
 @dp.message(F.text)
 async def handle_prompt(message: types.Message):
@@ -76,11 +74,10 @@ async def handle_prompt(message: types.Message):
 
     user_last_prompt[message.from_user.id] = arabic_prompt
 
-    msg = await message.answer("⏳ جاري الترجمة والتوليد بـ Ideogram V3... 🔥")
+    msg = await message.answer("⏳ جاري التوليد بـ Ideogram V3... 🔥")
 
     try:
-        english = translator.translate(arabic_prompt)
-        enhanced = f"masterpiece, best quality, ultra detailed, 8k, photorealistic, cinematic lighting, sharp focus, dynamic composition, vibrant colors, 9:16 vertical reel format, {english}"
+        enhanced = f"masterpiece, best quality, ultra detailed, 8k, photorealistic, cinematic lighting, sharp focus, dynamic composition, vibrant colors, 9:16 vertical reel format, {arabic_prompt}"
 
         result = await client.subscribe(
             "fal-ai/ideogram/v3",
@@ -112,8 +109,7 @@ async def regenerate(callback: CallbackQuery):
 
     msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
     try:
-        english = translator.translate(arabic_prompt)
-        enhanced = f"masterpiece, best quality, ultra detailed, 8k, photorealistic, cinematic lighting, sharp focus, dynamic composition, vibrant colors, 9:16 vertical reel format, {english}"
+        enhanced = f"masterpiece, best quality, ultra detailed, 8k, photorealistic, cinematic lighting, sharp focus, dynamic composition, vibrant colors, 9:16 vertical reel format, {arabic_prompt}"
 
         result = await client.subscribe(
             "fal-ai/ideogram/v3",
