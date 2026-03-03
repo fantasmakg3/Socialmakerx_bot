@@ -67,7 +67,7 @@ async def generate_image(message: types.Message):
             model="grok-imagine-image",
             prompt=prompt,
             n=1,
-            size="1024x1024",
+            aspect_ratio="1:1",      # ← تم الإصلاح هنا
         )
         image_url = response.data[0].url
         
@@ -89,8 +89,8 @@ async def handle_buttons(callback: CallbackQuery):
     
     elif data.startswith("regenerate:"):
         prompt = data.split(":", 1)[1]
-        await callback.message.answer(f"🔄 جاري إعادة توليد بنفس الوصف:\n{prompt}")
-        # هنا يمكن إعادة استدعاء generate_image لاحقاً
+        await callback.message.answer(f"🔄 جاري إعادة التوليد...\n{prompt}")
+        # يمكن توسيعها لاحقاً
     
     elif data == "edit_this":
         await callback.message.answer("📸 ارفع الصورة الآن + اكتب في الكابشن:\nedit: وصف التعديل")
@@ -98,7 +98,6 @@ async def handle_buttons(callback: CallbackQuery):
     elif data == "new_image":
         await callback.message.answer("🎨 اكتب /image + الوصف الجديد")
     
-    # أزرار أخرى حالياً تعطي رسالة قادم قريباً
     else:
         await callback.answer("⏳ قريباً إن شاء الله 🔥", show_alert=True)
 
@@ -107,13 +106,22 @@ async def handle_edit_photo(message: types.Message):
     if message.caption and ("edit" in message.caption.lower() or "تعديل" in message.caption):
         prompt = message.caption.lower().replace("edit:", "").replace("edit", "").replace("تعديل:", "").strip() or "حسن الصورة"
         await message.answer("🖌️ جاري التعديل...")
-        # (نفس الكود القديم للتعديل)
+        
         full_prompt = f"Edit this image: {prompt}"
         try:
-            response = await client.images.generate(model="grok-imagine-image", prompt=full_prompt, n=1, size="1024x1024")
-            await message.answer_photo(response.data[0].url, caption=f"✅ تم التعديل!\n{prompt}", reply_markup=image_keyboard(prompt))
+            response = await client.images.generate(
+                model="grok-imagine-image",
+                prompt=full_prompt,
+                n=1,
+                aspect_ratio="1:1",      # ← تم الإصلاح هنا أيضاً
+            )
+            await message.answer_photo(
+                response.data[0].url, 
+                caption=f"✅ تم التعديل!\n{prompt}",
+                reply_markup=image_keyboard(prompt)
+            )
         except Exception as e:
-            await message.answer(f"❌ {str(e)[:150]}")
+            await message.answer(f"❌ خطأ: {str(e)[:150]}")
     else:
         await message.answer("📸 ارفع صورة + اكتب edit: التعديل في الكابشن")
 
