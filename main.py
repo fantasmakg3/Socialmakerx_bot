@@ -21,9 +21,9 @@ user_last_prompt = {}
 
 RATIO_PROMPT = {
     "1:1": "perfect square 1:1 aspect ratio",
-    "9:16": "EXTREMELY TALL VERTICAL 9:16 portrait reel format, tall narrow image, full vertical composition",
-    "16:9": "wide horizontal 16:9 landscape format",
-    "4:5": "4:5 portrait format",
+    "9:16": "EXTREMELY TALL VERTICAL 9:16 portrait reel format, the image must be very tall and narrow, full vertical composition, tall narrow frame, portrait orientation, 9:16 aspect ratio, the entire scene is vertical",
+    "16:9": "wide horizontal 16:9 landscape format, the image must be very wide and short",
+    "4:5": "4:5 portrait aspect ratio",
     "3:2": "classic 3:2 aspect ratio"
 }
 
@@ -76,8 +76,11 @@ async def start_new_image(callback: CallbackQuery):
         "مثال: قط جميل يمشي على سطح القمر يرتدي نظارات"
     )
 
-@dp.message(F.text & \~F.text.startswith('/'))
+@dp.message(F.text)
 async def handle_prompt(message: types.Message):
+    if message.text.startswith('/'):
+        return
+
     prompt = message.text.strip()
     if len(prompt) < 5:
         await message.answer("اكتب وصف أطول شوي يا وحش 😅")
@@ -126,7 +129,7 @@ async def regenerate(callback: CallbackQuery):
         await callback.answer("❌ انتهت الجلسة", show_alert=True)
         return
 
-    ratio_code = "9:16"  # آخر قياس اختاره
+    ratio_code = "9:16"
     ratio_instruction = RATIO_PROMPT.get(ratio_code, "")
     final_prompt = f"{base_prompt}, {ratio_instruction}, masterpiece, highly detailed"
 
