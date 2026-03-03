@@ -46,7 +46,7 @@ def image_action_keyboard(prompt: str):
 async def start(message: types.Message):
     await message.answer(
         "👋 مرحبا يا وحش في @Socialmakerx_bot!\n"
-        "بوت Recraft V3 🔥 (أفضل في فهم العربي)\n\n"
+        "بوت Ideogram V3 🔥 (أفضل نموذج للبرومبت العربي 2026)\n\n"
         "اكتب أي وصف بالعربي وسيفهمك تمام",
         reply_markup=main_menu()
     )
@@ -62,7 +62,7 @@ async def image_menu(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "new_image")
 async def new_image(callback: CallbackQuery):
-    await callback.message.edit_text("🎨 اكتب وصف الصورة بالعربي (طويل ومفصل أفضل)")
+    await callback.message.edit_text("🎨 اكتب وصف الصورة بالعربي (كلما كان أطول وأوضح كان أفضل)")
 
 @dp.message(F.text)
 async def handle_prompt(message: types.Message):
@@ -76,25 +76,24 @@ async def handle_prompt(message: types.Message):
 
     user_last_prompt[message.from_user.id] = arabic_prompt
 
-    msg = await message.answer("⏳ جاري التوليد بـ Recraft V3... 🔥")
+    msg = await message.answer("⏳ جاري التوليد بـ Ideogram V3... 🔥")
 
     try:
-        # ترجمة + تعزيز قوي جداً
         english = translator.translate(arabic_prompt, dest='en').text
-        enhanced = f"masterpiece, best quality, ultra detailed, 8k, photorealistic, cinematic lighting, sharp focus, dynamic composition, highly detailed fur, vibrant colors, 9:16 vertical reel format, {english}"
+        enhanced = f"masterpiece, best quality, ultra detailed, 8k, photorealistic, cinematic lighting, sharp focus, dynamic composition, vibrant colors, 9:16 vertical reel format, {english}"
 
         result = await client.subscribe(
-            "fal-ai/recraft/v3/text-to-image",
+            "fal-ai/ideogram/v3",   # ← النموذج الجديد (الأفضل للبرومبت العربي)
             arguments={
                 "prompt": enhanced,
                 "image_size": {"width": 832, "height": 1472},
-                "num_inference_steps": 35,
-                "guidance_scale": 8.0
+                "num_inference_steps": 40,
+                "guidance_scale": 9.0
             }
         )
         image_url = result["images"][0]["url"]
 
-        await msg.edit_text("✅ تم التوليد بـ Recraft V3!")
+        await msg.edit_text("✅ تم التوليد بـ Ideogram V3!")
         await message.answer_photo(
             image_url,
             caption=f"🎨 تم بنجاح!\nالوصف: {arabic_prompt}",
@@ -114,15 +113,15 @@ async def regenerate(callback: CallbackQuery):
     msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
     try:
         english = translator.translate(arabic_prompt, dest='en').text
-        enhanced = f"masterpiece, best quality, ultra detailed, 8k, photorealistic, cinematic lighting, sharp focus, dynamic composition, highly detailed fur, vibrant colors, 9:16 vertical reel format, {english}"
+        enhanced = f"masterpiece, best quality, ultra detailed, 8k, photorealistic, cinematic lighting, sharp focus, dynamic composition, vibrant colors, 9:16 vertical reel format, {english}"
 
         result = await client.subscribe(
-            "fal-ai/recraft/v3/text-to-image",
+            "fal-ai/ideogram/v3",
             arguments={
                 "prompt": enhanced,
                 "image_size": {"width": 832, "height": 1472},
-                "num_inference_steps": 35,
-                "guidance_scale": 8.0
+                "num_inference_steps": 40,
+                "guidance_scale": 9.0
             }
         )
         image_url = result["images"][0]["url"]
