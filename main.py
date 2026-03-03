@@ -19,11 +19,12 @@ client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 user_last_prompt = {}
 
+# Prompt engineering قوي جداً للقياسات
 RATIO_PROMPT = {
-    "1:1": "perfect square 1:1 aspect ratio",
-    "9:16": "EXTREMELY TALL VERTICAL 9:16 portrait reel format, tall narrow image, full vertical composition",
-    "16:9": "wide horizontal 16:9 landscape format",
-    "4:5": "4:5 portrait aspect ratio",
+    "1:1": "perfect square 1:1 aspect ratio, the entire image is perfectly square",
+    "9:16": "EXTREMELY TALL VERTICAL 9:16 ASPECT RATIO, the image MUST be very tall and narrow, full vertical reel format, portrait orientation, height much larger than width, tall narrow frame, vertical composition, do not generate square image, 9:16 ratio, Instagram Reel style",
+    "16:9": "EXTREMELY WIDE HORIZONTAL 16:9 ASPECT RATIO, the image MUST be very wide and short, full horizontal landscape format, wide frame, do not generate vertical or square image",
+    "4:5": "4:5 portrait aspect ratio, slightly taller than square, vertical format",
     "3:2": "classic 3:2 aspect ratio"
 }
 
@@ -100,7 +101,7 @@ async def generate_image(callback: CallbackQuery):
         return
 
     ratio_instruction = RATIO_PROMPT.get(ratio_code, "")
-    final_prompt = f"{base_prompt}, {ratio_instruction}, masterpiece, highly detailed, best quality"
+    final_prompt = f"{ratio_instruction}, {base_prompt}, masterpiece, highly detailed, best quality"
 
     msg = await callback.message.edit_text(f"⏳ جاري توليد الصورة...\nقياس: {ratio_code}")
 
@@ -131,7 +132,7 @@ async def regenerate(callback: CallbackQuery):
 
     ratio_code = "9:16"
     ratio_instruction = RATIO_PROMPT.get(ratio_code, "")
-    final_prompt = f"{base_prompt}, {ratio_instruction}, masterpiece, highly detailed"
+    final_prompt = f"{ratio_instruction}, {base_prompt}, masterpiece, highly detailed"
 
     msg = await callback.message.answer("🔄 جاري إعادة التوليد...")
     try:
