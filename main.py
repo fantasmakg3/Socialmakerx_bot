@@ -18,7 +18,7 @@ dp = Dispatcher()
 
 client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
-PASSWORD = "onlykggrok"   # كلمة مرور ثابتة لكل الصور
+PASSWORD = "onlykggrok"  # كلمة المرور للصور
 
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -49,7 +49,6 @@ async def edit_image(callback: CallbackQuery):
         "مثال: غير لون التيشيرت إلى الزهري"
     )
 
-# إنشاء صورة جديدة
 @dp.message(F.text)
 async def handle_new_image(message: types.Message):
     if message.text.startswith('/'):
@@ -61,14 +60,17 @@ async def handle_new_image(message: types.Message):
 
     msg = await message.answer("⏳ جاري التوليد...")
     try:
-        response = await client.images.generate(model="grok-imagine-image", prompt=prompt, n=1)
+        response = await client.images.generate(
+            model="grok-imagine-image",
+            prompt=prompt,
+            n=1
+        )
         image_url = response.data[0].url
         await msg.edit_text("✅ تم التوليد!")
         await message.answer_photo(image_url, caption=f"🎨 تم بنجاح!\nPrompt: {prompt}", reply_markup=main_menu())
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
 
-# تعديل صورة موجودة (مع رفع على Temp-Image.com)
 @dp.message(F.photo)
 async def handle_edit_image(message: types.Message):
     if not message.caption:
@@ -77,17 +79,18 @@ async def handle_edit_image(message: types.Message):
 
     edit_desc = message.caption.strip()
 
+    # تحميل الصورة من تليجرام
     photo = message.photo[-1]
     file = await photo.get_file()
     file_bytes = await bot.download_file(file.file_path)
 
-    msg = await message.answer("📤 جاري رفع الصورة بأمان على Temp-Image (5 دقايق + باسورد)...")
+    msg = await message.answer("📤 جاري رفع الصورة بأمان على Temp-Image (5 دقائق + باسورد)...")
 
     # رفع على Temp-Image.com
     async with aiohttp.ClientSession() as session:
         data = aiohttp.FormData()
         data.add_field('file', file_bytes, filename='image.jpg', content_type='image/jpeg')
-        data.add_field('expiration', '5')   # 5 دقايق
+        data.add_field('expiration', '5')   # 5 دقائق
         data.add_field('password', PASSWORD)
 
         async with session.post('https://temp-image.com/upload', data=data) as resp:
@@ -98,15 +101,16 @@ async def handle_edit_image(message: types.Message):
         await msg.edit_text("❌ فشل رفع الصورة، حاول مرة ثانية")
         return
 
+    # برومبت قوي جداً لـ Grok
     full_prompt = (
         f"Edit the EXACT uploaded image: {image_url}. "
         f"Password: {PASSWORD}. "
         f"Keep the same person, same face, same pose, same background, same lighting, same everything. "
         f"Only apply this change: {edit_desc}. "
-        f"Do not create a new scene."
+        f"Do not create a new scene or new person."
     )
 
-    await msg.edit_text("🖌️ جاري تعديل الصورة بالضبط بـ Grok...")
+    await msg.edit_text("🖌️ جاري تعديل الصورة بالضبط بـ Grok Imagine...")
 
     try:
         response = await client.images.generate(
