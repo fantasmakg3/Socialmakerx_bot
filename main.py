@@ -18,7 +18,7 @@ dp = Dispatcher()
 
 client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
-PASSWORD = "onlykggrok"  # كلمة المرور للصور
+PASSWORD = "onlykggrok"  # باسورد ثابت لكل الصور المرفوعة
 
 def main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -32,7 +32,7 @@ def main_menu():
 async def start(message: types.Message):
     await message.answer(
         "👋 مرحبا يا وحش في @Socialmakerx_bot!\n"
-        "Grok Imagine + Temp-Image (خصوصية عالية) 🔥\n\n"
+        "Grok Imagine الرسمي (يدعم تعديل الصور) 🔥\n\n"
         "اختر اللي تبغاه:",
         reply_markup=main_menu()
     )
@@ -49,10 +49,12 @@ async def edit_image(callback: CallbackQuery):
         "مثال: غير لون التيشيرت إلى الزهري"
     )
 
+# إنشاء صورة جديدة
 @dp.message(F.text)
 async def handle_new_image(message: types.Message):
     if message.text.startswith('/'):
         return
+
     prompt = message.text.strip()
     if len(prompt) < 5:
         await message.answer("اكتب وصف أطول شوي يا وحش 😅")
@@ -71,6 +73,7 @@ async def handle_new_image(message: types.Message):
     except Exception as e:
         await msg.edit_text(f"❌ خطأ: {str(e)[:200]}")
 
+# تعديل صورة موجودة (مع رفع على Temp-Image.com)
 @dp.message(F.photo)
 async def handle_edit_image(message: types.Message):
     if not message.caption:
@@ -84,13 +87,13 @@ async def handle_edit_image(message: types.Message):
     file = await photo.get_file()
     file_bytes = await bot.download_file(file.file_path)
 
-    msg = await message.answer("📤 جاري رفع الصورة بأمان على Temp-Image (5 دقائق + باسورد)...")
+    msg = await message.answer("📤 جاري رفع الصورة بأمان على Temp-Image (5 دقايق + باسورد)...")
 
     # رفع على Temp-Image.com
     async with aiohttp.ClientSession() as session:
         data = aiohttp.FormData()
         data.add_field('file', file_bytes, filename='image.jpg', content_type='image/jpeg')
-        data.add_field('expiration', '5')   # 5 دقائق
+        data.add_field('expiration', '5')   # 5 دقايق
         data.add_field('password', PASSWORD)
 
         async with session.post('https://temp-image.com/upload', data=data) as resp:
